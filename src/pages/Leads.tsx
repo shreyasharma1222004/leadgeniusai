@@ -529,7 +529,7 @@ function EmptyState() {
         Your pipeline is empty.
       </h2>
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-        Import your existing leads or add your first prospect — Leadly will
+        Import your existing leads or add your first prospect — DealFlow AI will
         research them and draft the opening message.
       </p>
       <div className="mt-5 flex flex-wrap justify-center gap-2">

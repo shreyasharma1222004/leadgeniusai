@@ -100,8 +100,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       {/* Left: brand panel */}
       <div className="relative hidden flex-col justify-between border-r border-border bg-[#141414] p-10 text-[#F5F1E8] lg:flex">
         <Link to="/" className="flex items-center gap-2">
-          <img src={logo} alt="Leadly" className="size-7 rounded-md" />
-          <span className="text-sm font-semibold tracking-tight">Leadly</span>
+          <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
+          <span className="text-sm font-semibold tracking-tight">DealFlow AI</span>
         </Link>
         <div>
           <p className="label-caps text-[#F5F1E8]/50">AI-powered sales</p>
@@ -123,8 +123,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       <div className="flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm">
           <Link to="/" className="mb-8 flex items-center justify-center gap-2 lg:hidden">
-            <img src={logo} alt="Leadly" className="size-7 rounded-md" />
-            <span className="text-sm font-semibold tracking-tight">Leadly</span>
+            <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
+            <span className="text-sm font-semibold tracking-tight">DealFlow AI</span>
           </Link>
 
           {step === "signIn" ? (

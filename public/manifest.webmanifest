@@ -1,6 +1,6 @@
 {
-  "name": "Leadly — AI Sales Assistant",
-  "short_name": "Leadly",
+  "name": "DealFlow AI — AI Sales Assistant",
+  "short_name": "DealFlow AI",
   "description": "Find leads, research prospects, generate personalized outreach, and manage your pipeline with AI.",
   "start_url": "/",
   "display": "standalone",
