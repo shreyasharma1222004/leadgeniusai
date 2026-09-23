@@ -1,0 +1,17 @@
+{
+  "name": "Leadly — AI Sales Assistant",
+  "short_name": "Leadly",
+  "description": "Find leads, research prospects, generate personalized outreach, and manage your pipeline with AI.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF8F3",
+  "theme_color": "#141414",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
