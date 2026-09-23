@@ -101,7 +101,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       <div className="relative hidden flex-col justify-between border-r border-border bg-[#141414] p-10 text-[#F5F1E8] lg:flex">
         <Link to="/" className="flex items-center gap-2">
           <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
-          <span className="text-sm font-semibold tracking-tight">DealFlow AI</span>
+          <span className="text-sm font-semibold tracking-tight">
+            DealFlow<span className="text-[#A9E813]"> AI</span>
+          </span>
         </Link>
         <div>
           <p className="label-caps text-[#F5F1E8]/50">AI-powered sales</p>
@@ -124,7 +126,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         <div className="w-full max-w-sm">
           <Link to="/" className="mb-8 flex items-center justify-center gap-2 lg:hidden">
             <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
-            <span className="text-sm font-semibold tracking-tight">DealFlow AI</span>
+            <span className="text-sm font-semibold tracking-tight">
+              DealFlow<span className="text-[#A9E813]"> AI</span>
+            </span>
           </Link>
 
           {step === "signIn" ? (

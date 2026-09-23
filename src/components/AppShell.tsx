@@ -214,7 +214,9 @@ export function AppShell({
         >
           <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
           {!collapsed && (
-            <span className="text-sm font-semibold tracking-tight">DealFlow AI</span>
+            <span className="text-sm font-semibold tracking-tight">
+              DealFlow<span className="text-[#A9E813]"> AI</span>
+            </span>
           )}
         </div>
         <div className="flex-1 overflow-y-auto py-2">
@@ -238,7 +240,9 @@ export function AppShell({
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur md:hidden">
           <div className="flex items-center gap-2">
             <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
-            <span className="text-sm font-semibold tracking-tight">DealFlow AI</span>
+            <span className="text-sm font-semibold tracking-tight">
+              DealFlow<span className="text-[#A9E813]"> AI</span>
+            </span>
           </div>
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
@@ -249,7 +253,7 @@ export function AppShell({
             <SheetContent side="left" className="w-72 p-0">
               <SheetTitle className="flex h-14 items-center gap-2 border-b border-border px-4 text-sm font-semibold">
                 <img src={logo} alt="" className="size-7 rounded-md" />
-                DealFlow AI
+                DealFlow<span className="text-[#A9E813]"> AI</span>
               </SheetTitle>
               <div className="flex h-[calc(100%-3.5rem)] flex-col">
                 <div className="flex-1 overflow-y-auto py-4">

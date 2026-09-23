@@ -180,7 +180,9 @@ export default function Landing() {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 md:px-8">
           <Link to="/" className="flex items-center gap-2">
             <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
-            <span className="text-sm font-semibold tracking-tight">DealFlow AI</span>
+            <span className="text-sm font-semibold tracking-tight">
+              DealFlow<span className="text-[#A9E813]"> AI</span>
+            </span>
           </Link>
           <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
             <a href="#workflow" className="transition-colors hover:text-foreground">How it works</a>
@@ -491,7 +493,10 @@ export default function Landing() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-xs text-muted-foreground md:flex-row md:px-8">
           <div className="flex items-center gap-2">
             <img src={logo} alt="" className="size-5 rounded" />
-            <span>© {new Date().getFullYear()} DealFlow AI — demo product</span>
+            <span>
+              © {new Date().getFullYear()} DealFlow
+              <span className="text-[#A9E813]"> AI</span> — demo product
+            </span>
           </div>
           <nav className="flex gap-5">
             <a href="#features">Features</a>
@@ -544,7 +549,9 @@ function DashboardPreview() {
         <div className="hidden border-r border-border bg-sidebar p-3 md:block">
           <div className="flex items-center gap-2 px-1.5 pb-4">
             <img src={logo} alt="" className="size-5 rounded" />
-            <span className="text-xs font-semibold">DealFlow AI</span>
+            <span className="text-xs font-semibold">
+              DealFlow<span className="text-[#A9E813]"> AI</span>
+            </span>
           </div>
           {["Leads", "Pipeline", "Campaigns", "Inbox", "Tasks"].map((item, i) => (
             <div

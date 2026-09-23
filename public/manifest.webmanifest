@@ -4,8 +4,8 @@
   "description": "Find leads, research prospects, generate personalized outreach, and manage your pipeline with AI.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FAF8F3",
-  "theme_color": "#141414",
+  "background_color": "#0B0B0D",
+  "theme_color": "#0B0B0D",
   "icons": [
     {
       "src": "/logo.svg",
