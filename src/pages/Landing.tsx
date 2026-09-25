@@ -43,23 +43,23 @@ const FEATURES = [
   },
   {
     icon: Bot,
-    title: "AI outreach (soon)",
-    body: "Draft emails and messages tuned to each lead's context. You approve every send.",
+    title: "AI outreach",
+    body: "Draft emails and LinkedIn messages tuned to each lead's context. Send by email in one click, or copy and log it manually — you approve every send.",
   },
   {
     icon: CalendarClock,
-    title: "Smart follow-ups (soon)",
-    body: "Day 3, day 7, day 14. DealFlow AI schedules the cadence so leads don't go quiet on you.",
+    title: "Smart follow-ups",
+    body: "Day 3, day 7, day 14. DealFlow AI schedules the cadence, tracks what's overdue, and keeps leads from going quiet on you.",
   },
   {
     icon: Kanban,
-    title: "Pipeline (soon)",
-    body: "A kanban view from New to Won. Drag a card, change a status — same data, different lens.",
+    title: "Pipeline & campaigns",
+    body: "A kanban view from New to Won, plus bulk campaigns with per-lead personalization. Drag a card, send a campaign — same data, different lens.",
   },
   {
     icon: BarChart3,
-    title: "Analytics (soon)",
-    body: "Contact rates, reply rates, conversion. Know which campaigns actually pull their weight.",
+    title: "Analytics & AI assistant",
+    body: "Contact rates, reply rates, conversion, and a chat assistant that answers questions about your pipeline in plain language.",
   },
 ];
 
@@ -159,8 +159,12 @@ const FAQS = [
     a: "If your CRM is a spreadsheet wearing a suit, yes. DealFlow AI is deliberately lighter than enterprise CRM: it focuses on the loop that actually creates revenue — research, outreach, follow-up, pipeline — without asking you to maintain forty fields per contact.",
   },
   {
-    q: "What integrations are coming?",
-    a: "Gmail, Outlook, LinkedIn, Google Calendar and Slack are on the roadmap, alongside deeper CRM connections. Email outreach in V1 works by copy-and-send, so nothing sends without your explicit click.",
+    q: "Can I actually send emails from DealFlow AI?",
+    a: "Yes. Connect a Resend API key in your workspace settings and outreach emails are delivered directly from the app — every send is logged to the lead's thread. Without a key, DealFlow AI still drafts, personalizes and tracks everything; you just copy the message into Gmail or LinkedIn yourself.",
+  },
+  {
+    q: "What integrations are supported?",
+    a: "Email delivery is live via Resend. AI briefs run on OpenAI when a key is configured, with a built-in heuristic engine as fallback. Gmail, Outlook, LinkedIn and calendar sync are on the roadmap — the Integrations page in-app shows exactly what's connected.",
   },
   {
     q: "Can I cancel anytime?",
@@ -312,12 +316,7 @@ export default function Landing() {
             {FEATURES.map((f) => (
               <div key={f.title} className="bg-card p-6">
                 <f.icon className="size-5" />
-                <p className="mt-3 text-sm font-semibold">
-                  {f.title}
-                  {f.title.includes("(soon)") && (
-                    <span className="label-caps ml-2 text-[9px] text-muted-foreground/60">soon</span>
-                  )}
-                </p>
+                <p className="mt-3 text-sm font-semibold">{f.title}</p>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
                   {f.body}
                 </p>

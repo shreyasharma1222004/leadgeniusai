@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { OutreachComposer } from "@/components/OutreachComposer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,7 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { formatDateTime, initials, timeAgo } from "@/lib/format";
 import { analyzeLead } from "@/lib/leads-client";
+import { useMemo } from "react";
 import {
   LEAD_STATUSES,
   LEAD_STATUS_LABELS,
@@ -32,7 +34,9 @@ import {
   Loader2,
   Mail,
   MapPin,
+  MessagesSquare,
   Phone,
+  Send,
   Sparkles,
   Globe,
   StickyNote,
@@ -61,6 +65,7 @@ export default function LeadDetailPage() {
   );
 
   const [analyzing, setAnalyzing] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpAt, setFollowUpAt] = useState("");
@@ -198,6 +203,9 @@ export default function LeadDetailPage() {
       }
       actions={
         <>
+          <Button variant="outline" onClick={() => setComposerOpen(true)}>
+            <Mail className="size-4" /> Compose outreach
+          </Button>
           <Button variant="outline" onClick={() => setFollowUpOpen(true)}>
             <CalendarPlus className="size-4" /> Follow-up
           </Button>
@@ -457,6 +465,9 @@ export default function LeadDetailPage() {
             )}
           </section>
 
+          {/* Message thread */}
+          <MessageThread leadId={lead._id} leadName={lead.name} onCompose={() => setComposerOpen(true)} />
+
           {/* Follow-up timeline */}
           <section className="rounded-lg border border-border bg-card p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -580,6 +591,16 @@ export default function LeadDetailPage() {
         </div>
       </div>
 
+      {/* Shared outreach composer */}
+      {lead && (
+        <OutreachComposer
+          leads={[lead]}
+          open={composerOpen}
+          onOpenChange={setComposerOpen}
+          onSent={() => toast("Check the thread below — every send is logged.")}
+        />
+      )}
+
       {/* Schedule follow-up dialog */}
       <Dialog open={followUpOpen} onOpenChange={setFollowUpOpen}>
         <DialogContent className="sm:max-w-md">
@@ -621,6 +642,79 @@ export default function LeadDetailPage() {
       </Dialog>
     </AppShell>
   );
+}
+
+function MessageThread({
+  leadId,
+  leadName,
+  onCompose,
+}: {
+  leadId: Id<"leads">;
+  leadName: string;
+  onCompose: () => void;
+}) {
+  const messages = useQuery(api.messages.threadForLead, { leadId });
+  const sorted = useMemo(() => [...(messages ?? [])].sort((a, b) => a.createdAt - b.createdAt), [messages]);
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <MessagesSquare className="size-4 text-muted-foreground" /> Outreach thread
+        </h2>
+        <Button variant="outline" size="sm" onClick={onCompose}>
+          <Send className="size-3.5" /> Compose
+        </Button>
+      </div>
+      {messages === undefined ? (
+        <div className="mt-3 space-y-2">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-5/6" />
+        </div>
+      ) : sorted.length === 0 ? (
+        <div className="mt-3 rounded-md border border-dashed border-border px-4 py-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            No messages yet. Every email or LinkedIn message you send or log for this lead lands here.
+          </p>
+        </div>
+      ) : (
+        <ol className="mt-4 space-y-3">
+          {sorted.map((m) => {
+            const outbound = m.direction === "sent";
+            return (
+              <li
+                key={m._id}
+                className={cn(
+                  "max-w-[85%] rounded-lg border px-3.5 py-2.5",
+                  outbound
+                    ? "ml-auto border-[#D4FF4F]/50 bg-[#D4FF4F]/10"
+                    : "border-border bg-muted/40",
+                )}
+              >
+                <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    {outbound ? "You" : leadName}
+                  </span>
+                  <span className="capitalize">{m.channel}</span>
+                  {m.subject && (
+                    <span className="max-w-48 truncate">· {m.subject}</span>
+                  )}
+                  <span>· {timeAgo(m.createdAt)}</span>
+                  {m.status === "failed" && (
+                    <span className="text-destructive">· failed</span>
+                  )}
+                  {m.direction === "received" && !m.readAt && (
+                    <span className="font-medium text-foreground/70">· new</span>
+                  )}
+                </div>
+                <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed">{m.body}</p>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
+ );
 }
 
 function ContactRow({

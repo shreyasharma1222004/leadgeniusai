@@ -21,13 +21,11 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router";
-import { toast } from "sonner";
 
 interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  to?: string;
-  soon?: boolean;
+  to: string;
 }
 
 const NAV: { section: string; items: NavItem[] }[] = [
@@ -35,26 +33,26 @@ const NAV: { section: string; items: NavItem[] }[] = [
     section: "Workspace",
     items: [
       { label: "Leads", icon: Users, to: "/leads" },
-      { label: "Pipeline", icon: Kanban, soon: true },
-      { label: "Campaigns", icon: Target, soon: true },
-      { label: "Inbox", icon: Inbox, soon: true },
-      { label: "Tasks", icon: CalendarClock, soon: true },
+      { label: "Pipeline", icon: Kanban, to: "/pipeline" },
+      { label: "Campaigns", icon: Target, to: "/campaigns" },
+      { label: "Inbox", icon: Inbox, to: "/inbox" },
+      { label: "Tasks", icon: CalendarClock, to: "/tasks" },
     ],
   },
   {
     section: "Intelligence",
     items: [
-      { label: "AI Assistant", icon: Bot, soon: true },
-      { label: "Lead Research", icon: Sparkles, soon: true },
-      { label: "Analytics", icon: BarChart3, soon: true },
+      { label: "AI Assistant", icon: Bot, to: "/assistant" },
+      { label: "Lead Research", icon: Sparkles, to: "/research" },
+      { label: "Analytics", icon: BarChart3, to: "/analytics" },
     ],
   },
   {
     section: "Management",
     items: [
-      { label: "Contacts", icon: LayoutGrid, soon: true },
-      { label: "Templates", icon: BookMarked, soon: true },
-      { label: "Integrations", icon: Plug, soon: true },
+      { label: "Contacts", icon: LayoutGrid, to: "/contacts" },
+      { label: "Templates", icon: BookMarked, to: "/templates" },
+      { label: "Integrations", icon: Plug, to: "/integrations" },
     ],
   },
 ];
@@ -66,12 +64,6 @@ function NavList({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
-  const handleSoon = (label: string) => {
-    toast(`${label} is on the roadmap`, {
-      description: "V1 focuses on leads — this ships next.",
-    });
-  };
-
   return (
     <nav aria-label="Primary" className="flex flex-col gap-6 px-3">
       {NAV.map((group) => (
@@ -85,53 +77,25 @@ function NavList({
           <ul className="flex flex-col gap-0.5">
             {group.items.map((item) => {
               const Icon = item.icon;
-              if (item.to) {
-                return (
-                  <li key={item.label}>
-                    <NavLink
-                      to={item.to}
-                      onClick={onNavigate}
-                      className={({ isActive }) =>
-                        cn(
-                          "group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
-                          "hover:bg-accent hover:text-accent-foreground",
-                          collapsed && "justify-center px-0",
-                          isActive
-                            ? "bg-accent font-medium text-accent-foreground"
-                            : "text-muted-foreground",
-                        )
-                      }
-                    >
-                      <Icon className="size-4 shrink-0" />
-                      {!collapsed && <span>{item.label}</span>}
-                    </NavLink>
-                  </li>
-                );
-              }
               return (
                 <li key={item.label}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onNavigate) onNavigate();
-                      handleSoon(item.label);
-                    }}
-                    title={collapsed ? `${item.label} (soon)` : undefined}
-                    className={cn(
-                      "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground/70 transition-colors hover:bg-accent/60 hover:text-muted-foreground",
-                      collapsed && "justify-center px-0",
-                    )}
+                  <NavLink
+                    to={item.to}
+                    onClick={onNavigate}
+                    className={({ isActive }) =>
+                      cn(
+                        "group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
+                        "hover:bg-accent hover:text-accent-foreground",
+                        collapsed && "justify-center px-0",
+                        isActive
+                          ? "bg-accent font-medium text-accent-foreground"
+                          : "text-muted-foreground",
+                      )
+                    }
                   >
                     <Icon className="size-4 shrink-0" />
-                    {!collapsed && (
-                      <>
-                        <span>{item.label}</span>
-                        <span className="label-caps ml-auto text-[9px] text-muted-foreground/50">
-                          soon
-                        </span>
-                      </>
-                    )}
-                  </button>
+                    {!collapsed && <span>{item.label}</span>}
+                  </NavLink>
                 </li>
               );
             })}

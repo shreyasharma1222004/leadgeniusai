@@ -92,6 +92,62 @@ const schema = defineSchema(
       body: v.string(),
       author: v.optional(v.string()),
     }).index("by_lead", ["leadId"]),
+
+    templates: defineTable({
+      userId: v.id("users"),
+      name: v.string(),
+      subject: v.optional(v.string()),
+      body: v.string(),
+      channel: v.optional(v.string()), // email | linkedin
+      tags: v.optional(v.array(v.string())),
+      lastUsedAt: v.optional(v.number()),
+      createdAt: v.number(),
+    }).index("by_user", ["userId"]),
+
+    messages: defineTable({
+      userId: v.id("users"),
+      leadId: v.id("leads"),
+      campaignId: v.optional(v.id("campaigns")),
+      channel: v.string(), // email | linkedin
+      direction: v.string(), // sent | received | logged
+      subject: v.optional(v.string()),
+      body: v.string(),
+      // draft | queued | sent | failed (outbound); unread/read (inbound)
+      status: v.string(),
+      readAt: v.optional(v.number()),
+      error: v.optional(v.string()),
+      provider: v.optional(v.string()),
+      createdAt: v.number(),
+      sentAt: v.optional(v.number()),
+    })
+      .index("by_lead", ["leadId"])
+      .index("by_user_created", ["userId", "createdAt"])
+      .index("by_campaign", ["campaignId"]),
+
+    campaigns: defineTable({
+      userId: v.id("users"),
+      name: v.string(),
+      description: v.optional(v.string()),
+      channel: v.string(), // email | linkedin
+      subject: v.optional(v.string()),
+      templateId: v.optional(v.id("templates")),
+      body: v.string(),
+      // draft | active | completed
+      status: v.string(),
+      createdAt: v.number(),
+    }).index("by_user", ["userId"]),
+
+    campaignLeads: defineTable({
+      userId: v.id("users"),
+      campaignId: v.id("campaigns"),
+      leadId: v.id("leads"),
+      // pending | sent | replied | failed
+      status: v.string(),
+      sentAt: v.optional(v.number()),
+      error: v.optional(v.string()),
+    })
+      .index("by_campaign", ["campaignId"])
+      .index("by_lead", ["leadId"]),
   },
   {
     schemaValidation: false,

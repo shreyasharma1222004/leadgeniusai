@@ -14,6 +14,16 @@ const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const LeadsPage = lazy(() => import("./pages/Leads.tsx"));
 const LeadDetailPage = lazy(() => import("./pages/LeadDetail.tsx"));
+const PipelinePage = lazy(() => import("./pages/Pipeline.tsx"));
+const CampaignsPage = lazy(() => import("./pages/Campaigns.tsx"));
+const InboxPage = lazy(() => import("./pages/Inbox.tsx"));
+const TasksPage = lazy(() => import("./pages/Tasks.tsx"));
+const AssistantPage = lazy(() => import("./pages/Assistant.tsx"));
+const ResearchPage = lazy(() => import("./pages/Research.tsx"));
+const AnalyticsPage = lazy(() => import("./pages/Analytics.tsx"));
+const ContactsPage = lazy(() => import("./pages/Contacts.tsx"));
+const TemplatesPage = lazy(() => import("./pages/Templates.tsx"));
+const IntegrationsPage = lazy(() => import("./pages/Integrations.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -135,6 +145,86 @@ createRoot(document.getElementById("root")!).render(
                 element={
                   <RequireAuth>
                     <LeadDetailPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/pipeline"
+                element={
+                  <RequireAuth>
+                    <PipelinePage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/campaigns"
+                element={
+                  <RequireAuth>
+                    <CampaignsPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/inbox"
+                element={
+                  <RequireAuth>
+                    <InboxPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/tasks"
+                element={
+                  <RequireAuth>
+                    <TasksPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/assistant"
+                element={
+                  <RequireAuth>
+                    <AssistantPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/research"
+                element={
+                  <RequireAuth>
+                    <ResearchPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/analytics"
+                element={
+                  <RequireAuth>
+                    <AnalyticsPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/contacts"
+                element={
+                  <RequireAuth>
+                    <ContactsPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/templates"
+                element={
+                  <RequireAuth>
+                    <TemplatesPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/integrations"
+                element={
+                  <RequireAuth>
+                    <IntegrationsPage />
                   </RequireAuth>
                 }
               />

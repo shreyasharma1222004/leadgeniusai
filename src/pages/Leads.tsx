@@ -1,6 +1,7 @@
 import { AddLeadDialog } from "@/components/AddLeadDialog";
 import { ImportCsvDialog } from "@/components/ImportCsvDialog";
 import { AppShell } from "@/components/AppShell";
+import { OutreachComposer } from "@/components/OutreachComposer";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -33,6 +34,7 @@ import {
   ListFilter,
   MoreHorizontal,
   Search,
+  Send,
   Sparkles,
   Trash2,
   Users,
@@ -54,6 +56,8 @@ export default function LeadsPage() {
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [selected, setSelected] = useState<Set<Id<"leads">>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeTargets, setComposeTargets] = useState<Doc2[]>([]);
 
   const filtered = useMemo(() => {
     if (!leads) return [];
@@ -111,6 +115,17 @@ export default function LeadsPage() {
     } finally {
       setBulkBusy(false);
     }
+  };
+
+  const selectedLeads = useMemo(
+    () => (leads ?? []).filter((l) => selected.has(l._id)),
+    [leads, selected],
+  );
+
+  const openCompose = (targets: Doc2[]) => {
+    if (targets.length === 0) return;
+    setComposeTargets(targets);
+    setComposeOpen(true);
   };
 
   return (
@@ -192,29 +207,13 @@ export default function LeadsPage() {
               {selected.size} selected
             </span>
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" className="h-7 gap-1 text-xs">
-                    <Sparkles className="size-3" /> Generate outreach
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() =>
-                    toast("Outreach generation ships in the next release", {
-                      description: "V1 covers adding, researching and tracking leads.",
-                    })
-                  }>
-                    Email draft (soon)
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() =>
-                    toast("Outreach generation ships in the next release", {
-                      description: "V1 covers adding, researching and tracking leads.",
-                    })
-                  }>
-                    LinkedIn message (soon)
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button
+                size="sm"
+                className="h-7 gap-1 text-xs"
+                onClick={() => openCompose(selectedLeads)}
+              >
+                <Sparkles className="size-3" /> Compose outreach
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" className="h-7 gap-1 text-xs">
@@ -384,6 +383,7 @@ export default function LeadsPage() {
                       <LeadRowMenu
                         lead={lead}
                         onAnalyze={() => mutationHelpers.analyze(lead)}
+                        onCompose={() => openCompose([lead])}
                         onStatus={(s) =>
                           runBulk(
                             () =>
@@ -465,6 +465,12 @@ export default function LeadsPage() {
           </p>
         </>
       )}
+      {/* Shared outreach composer */}
+      <OutreachComposer
+        leads={composeTargets}
+        open={composeOpen}
+        onOpenChange={setComposeOpen}
+      />
     </AppShell>
   );
 }
@@ -472,11 +478,13 @@ export default function LeadsPage() {
 function LeadRowMenu({
   lead,
   onAnalyze,
+  onCompose,
   onStatus,
   onDelete,
 }: {
   lead: Doc2;
   onAnalyze: () => void;
+  onCompose: () => void;
   onStatus: (s: string) => void;
   onDelete: () => void;
 }) {
@@ -493,6 +501,9 @@ function LeadRowMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuItem onClick={onCompose}>
+          <Send className="mr-2 size-3.5" /> Compose outreach
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={onAnalyze}>
           <Sparkles className="mr-2 size-3.5" /> Analyze with AI
         </DropdownMenuItem>
