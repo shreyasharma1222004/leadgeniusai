@@ -786,16 +786,14 @@ function EditableEmailRow({
               Cancel
             </Button>
           </div>
-        ) : (
+        ) : email ? (
           <div className="flex items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-sm">
-              {email || <span className="text-muted-foreground/60">not set</span>}
-            </span>
+            <span className="min-w-0 flex-1 truncate text-sm">{email}</span>
             <button
               type="button"
               aria-label="Edit email"
               onClick={() => {
-                setDraft(email ?? "");
+                setDraft(email);
                 setEditing(true);
               }}
               className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -803,6 +801,18 @@ function EditableEmailRow({
               <Pencil className="size-3" />
             </button>
           </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 border-dashed text-xs"
+            onClick={() => {
+              setDraft("");
+              setEditing(true);
+            }}
+          >
+            <Pencil className="size-3" /> Add email address
+          </Button>
         )}
       </dd>
     </div>
