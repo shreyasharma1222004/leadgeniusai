@@ -91,6 +91,14 @@ export const logInbound = mutation({
     if (userId === null) throw new Error("You need to sign in to do that.");
     const lead = await ctx.db.get(leadId);
     if (!lead || lead.userId !== userId) throw new Error("Lead not found.");
+    // A reply means they engaged: advance the lead past "contacted".
+    const updates: { status?: string; lastContactedAt: number } = {
+      lastContactedAt: Date.now(),
+    };
+    if (lead.status === "contacted" || lead.status === "new") {
+      updates.status = "replied";
+    }
+    await ctx.db.patch(leadId, updates);
     return await ctx.db.insert("messages", {
       userId,
       leadId,

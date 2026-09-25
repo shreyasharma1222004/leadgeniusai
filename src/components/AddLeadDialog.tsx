@@ -177,21 +177,33 @@ export function AddLeadDialog({
         notes: form.notes.trim() || undefined,
         source: "Manual entry",
       });
-      if (analysis) {
+      let finalAnalysis = analysis;
+      if (analyze && !finalAnalysis) {
+        finalAnalysis = await analyzeLead({
+          name: form.name,
+          jobTitle: form.jobTitle,
+          company: form.company,
+          website: form.website,
+          industry: form.industry,
+          location: form.location,
+          notes: form.notes,
+        });
+      }
+      if (finalAnalysis) {
         await saveAnalysis({
           id,
-          score: analysis.score,
-          summary: analysis.summary,
-          painPoints: analysis.painPoints,
-          signals: analysis.signals,
-          approach: analysis.approach,
-          industry: analysis.industry || undefined,
-          scoreBreakdown: analysis.scoreBreakdown,
+          score: finalAnalysis.score,
+          summary: finalAnalysis.summary,
+          painPoints: finalAnalysis.painPoints,
+          signals: finalAnalysis.signals,
+          approach: finalAnalysis.approach,
+          industry: finalAnalysis.industry || undefined,
+          scoreBreakdown: finalAnalysis.scoreBreakdown,
         });
       }
       toast(`Lead added: ${form.name.trim()}`, {
-        description: analysis
-          ? `AI analysis attached (score ${analysis.score}/100).`
+        description: finalAnalysis
+          ? `AI analysis attached (score ${finalAnalysis.score}/100).`
           : "Add notes and analyze it any time from the lead page.",
       });
       reset();

@@ -50,7 +50,7 @@ export function askAssistant(
   }
 
   // Due / overdue follow-ups
-  if (/\b(follow.?up|due|overdue|today|this week|remind)\b/.test(q)) {
+  if (/\b(follow.?ups?|due|overdue|today|this week|remind)\b/.test(q)) {
     const now = Date.now();
     const overdue = followUps.filter((f) => f.status === "pending" && f.dueAt < now);
     const dueSoon = followUps.filter(
@@ -114,7 +114,7 @@ export function askAssistant(
   }
 
   // Campaigns
-  if (/\b(campaign|batch|blast|send out)\b/.test(q)) {
+  if (/\b(campaigns?|batch|blast|send out)\b/.test(q)) {
     if (campaigns.length === 0) {
       return {
         intent: "campaigns",
@@ -135,7 +135,7 @@ export function askAssistant(
   }
 
   // Stalled leads
-  if (/\b(stall|cold|quiet|ghost|no reply|not responded|neglect)\b/.test(q)) {
+  if (/\b(stalled?|cold|quiet|ghost|no repl(y|ies)|not responded|neglect)\b/.test(q)) {
     const now = Date.now();
     const stalled = leads
       .filter(
