@@ -102,14 +102,14 @@ export function OutreachComposer({
       const leadBody = renderTemplate(body, tokens);
       try {
         if (channel === "email" && lead.email) {
-          await sendEmailAction({ leadId: lead._id, subject: leadSubject, body: leadBody });
+          const delivery = await sendEmailAction({ leadId: lead._id, subject: leadSubject, body: leadBody });
           await sendEmail({
             leadId: lead._id,
             channel: "email",
             subject: leadSubject,
             body: leadBody,
             status: "sent",
-            provider: "resend",
+            provider: delivery.provider,
           });
           await markContacted({ id: lead._id });
           sent++;

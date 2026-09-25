@@ -132,7 +132,7 @@ export const remove = mutation({
   },
 });
 
-// ── Email sending (Resend). Set RESEND_API_KEY to enable live sending. ─────
+// ── Email sending (built-in gateway; Resend if RESEND_API_KEY is set) ─────
 
 export const sendEmail = action({
   args: {
@@ -141,7 +141,13 @@ export const sendEmail = action({
     body: v.string(),
     campaignId: v.optional(v.id("campaigns")),
   },
-  handler: async (ctx, { leadId, subject, body, campaignId }) => {
+  // Explicit return type: the runAction below goes through the generated API
+  // barrel, which includes this module — without the annotation TypeScript
+  // infers sendEmail's type from itself and never terminates.
+  handler: async (
+    ctx,
+    { leadId, subject, body, campaignId },
+  ): Promise<{ provider: string; providerId: string | null }> => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("You need to sign in to do that.");
 
@@ -155,37 +161,12 @@ export const sendEmail = action({
       );
     }
 
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      throw new Error(
-        "Email sending isn't connected yet. Add a RESEND_API_KEY in the Keys settings — until then, use “Copy message” and send it yourself.",
-      );
-    }
-
-    const from = process.env.RESEND_FROM_EMAIL ?? "DealFlow AI <onboarding@resend.dev>";
-    let response: Response;
-    try {
-      response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ from, to: email, subject, text: body }),
-      });
-    } catch {
-      throw new Error("Couldn't reach the email provider — check your connection and retry.");
-    }
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(
-        `The email provider rejected this send (${response.status}). ${detail.slice(0, 200)}`,
-      );
-    }
-
-    const payload = (await response.json().catch(() => ({}))) as { id?: string };
-    return { provider: "resend" as const, providerId: payload.id ?? null };
+    const result = await ctx.runAction(internal.emailDelivery.deliverEmail, {
+      to: email,
+      subject,
+      text: body,
+    });
+    return result;
   },
 });
 

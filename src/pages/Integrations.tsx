@@ -20,12 +20,20 @@ export default function IntegrationsPage() {
   const integrations: IntegrationRow[] = [
     {
       icon: Send,
-      name: "Resend — email sending",
+      name: "Email sending — built-in gateway",
+      status: "live",
+      description:
+        "Sends your outreach emails for real — single messages and full campaigns, straight from DealFlow AI.",
+      how: "Uses the platform's built-in email service. Zero setup — the key is injected automatically and usage is billed to your workspace.",
+    },
+    {
+      icon: Send,
+      name: "Resend — bring your own sender",
       status: "keys-needed",
       envVar: "RESEND_API_KEY",
       description:
-        "Sends your outreach emails for real — single messages and full campaigns, straight from DealFlow AI.",
-      how: "Add your API key in the Keys panel (or as RESEND_FROM_EMAIL with a verified sender). Without it, outreach still works in copy-and-send mode with full tracking.",
+        "Optional upgrade: deliver from your own verified domain instead of the built-in gateway.",
+      how: "Set a RESEND_API_KEY environment variable (plus RESEND_FROM_EMAIL for a custom sender). When present, every send automatically routes through Resend.",
     },
     {
       icon: Sparkles,
@@ -116,10 +124,11 @@ export default function IntegrationsPage() {
       <div className="mt-4 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4 text-xs leading-relaxed text-muted-foreground">
         <Plug className="mt-0.5 size-4 shrink-0" />
         <p>
-          Keys are managed in the platform's <span className="font-medium text-foreground">Keys / API keys</span>{" "}
-          panel and read server-side — they are never exposed in the client bundle (the OpenAI key is
-          the one exception by design and stays browser-side for direct calls). Gmail, Outlook,
-          LinkedIn and calendar sync remain on the roadmap; the copy-and-send flow covers them today.
+          The built-in email gateway and AI assistant work out of the box — no keys needed. Optional
+          keys (Resend, OpenAI) are set as environment variables and read server-side; they are never
+          exposed in the client bundle (the OpenAI key is the one exception by design and stays
+          browser-side for direct calls). Gmail, Outlook, LinkedIn and calendar sync remain on the
+          roadmap; the copy-and-send flow covers them today.
         </p>
       </div>
 

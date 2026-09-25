@@ -172,7 +172,7 @@ export default function InboxPage() {
                       campaign
                     </span>
                   )}
-                  {m.provider === "resend" && (
+                  {m.provider && m.provider !== "manual" && (
                     <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                       <Sparkles className="size-3" /> auto-sent
                     </span>
