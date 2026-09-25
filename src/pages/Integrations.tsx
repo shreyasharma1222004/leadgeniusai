@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
+import { DELIVERABILITY_TIPS } from "@/lib/outreach";
 import { useQuery } from "convex/react";
 import {
   Bot,
@@ -13,6 +14,7 @@ import {
   Mail,
   Plug,
   Send,
+  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { Link } from "react-router";
@@ -192,6 +194,31 @@ export default function IntegrationsPage() {
             appears in the lead's thread.
           </p>
         )}
+      </section>
+
+      {/* Deliverability playbook */}
+      <section className="mb-6 rounded-lg border border-border bg-card p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <ShieldCheck className="size-5 text-[#5c7a00]" />
+          <h2 className="text-sm font-semibold">Staying out of spam</h2>
+          <span className="rounded-full bg-[#D4FF4F] px-2 py-0.5 text-[10px] font-medium text-[#191918]">
+            Read before scaling up
+          </span>
+        </div>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+          Gmail delivers your email with proper signing (SPF/DKIM), so
+          technical setup is already done. Whether a message lands in the inbox
+          is decided by your sender reputation and how human it reads. These
+          are the levers that actually move it:
+        </p>
+        <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
+          {DELIVERABILITY_TIPS.map((tip) => (
+            <li key={tip} className="flex items-start gap-2 text-[13px] leading-relaxed text-muted-foreground">
+              <span aria-hidden className="mt-[7px] size-1 shrink-0 rounded-full bg-[#A9E813]" />
+              {tip}
+            </li>
+          ))}
+        </ul>
       </section>
 
       <div className="space-y-3">

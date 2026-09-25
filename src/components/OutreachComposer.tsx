@@ -13,11 +13,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { useAction, useMutation } from "convex/react";
-import { AlertTriangle, Copy, Loader2, Mail, Send, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  Copy,
+  Lightbulb,
+  Loader2,
+  Mail,
+  Send,
+  Sparkles,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   CHANNEL_LABELS,
+  DELIVERABILITY_TIPS,
   OUTREACH_CHANNELS,
   draftOutreach,
   renderTemplate,
@@ -268,6 +277,23 @@ export function OutreachComposer({
                 on send.
               </p>
             )}
+
+            {/* Spam-avoidance tips — collapsible so it never blocks the flow */}
+            <details className="group rounded-md border border-border bg-muted/30 px-3 py-2.5">
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+                <Lightbulb className="size-3.5" />
+                Keep it out of spam
+                <span className="ml-auto text-[10px] text-muted-foreground/60 group-open:hidden">show</span>
+                <span className="ml-auto hidden text-[10px] text-muted-foreground/60 group-open:inline">hide</span>
+              </summary>
+              <ul className="mt-2 space-y-1.5 pl-4">
+                {DELIVERABILITY_TIPS.slice(0, 4).map((tip) => (
+                  <li key={tip} className="list-disc text-xs leading-relaxed text-muted-foreground">
+                    {tip}
+                  </li>
+                  ))}
+              </ul>
+            </details>
 
             {error && mode !== "sending" && (
               <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">

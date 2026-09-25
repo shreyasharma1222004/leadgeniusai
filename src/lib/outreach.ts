@@ -91,6 +91,22 @@ export function draftOutreach(
   return { subject, body };
 }
 
+/**
+ * Practical habits that keep outreach out of recipients' spam folders.
+ * Gmail SMTP delivers with valid SPF/DKIM, so placement is decided by
+ * sender reputation + how human the message looks — these are the levers.
+ */
+export const DELIVERABILITY_TIPS = [
+  "Warm up: start at 5–10 emails a day and ramp slowly — sudden volume is the #1 spam trigger.",
+  "No links in the first email. Links (especially shortened ones) scream cold blast.",
+  "No attachments or images either — plain text reads as a person, not a campaign.",
+  "Make the first line about THEM — a real detail about their company — never about you.",
+  "Ask for any reply, even 'not interested'. Replies are the strongest not-spam signal there is.",
+  "If someone finds you in spam: ask them to tap 'Not spam' and reply once — their inbox learns and your next email lands.",
+  "Stay under ~20 sends a day while your sender reputation grows; consistency beats bursts.",
+  "Personalize every send — identical bodies sent in bulk get filtered as a group.",
+] as const;
+
 /** Suggested next-step copy for outreach flows. */
 export const OUTREACH_TIPS = [
   "Keep it under 120 words — short messages get more replies.",
