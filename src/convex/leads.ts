@@ -104,8 +104,12 @@ export const create = mutation({
   },
 });
 
+const { name: _name, ...OPTIONAL_LEAD_FIELDS } = LEAD_FIELDS;
+
 export const update = mutation({
-  args: { id: v.id("leads"), ...LEAD_FIELDS },
+  // Partial update: every field optional. The handler strips undefined values,
+  // so a request touching only one field never erases the others.
+  args: { id: v.id("leads"), name: v.optional(v.string()), ...OPTIONAL_LEAD_FIELDS },
   handler: async (ctx, { id, ...fields }) => {
     const userId = await requireUserId(ctx);
     const lead = await ctx.db.get(id);

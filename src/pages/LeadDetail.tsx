@@ -35,6 +35,7 @@ import {
   Mail,
   MapPin,
   MessagesSquare,
+  Pencil,
   Phone,
   Send,
   Sparkles,
@@ -257,7 +258,7 @@ export default function LeadDetailPage() {
               )}
             </div>
             <dl className="mt-4 space-y-2 text-sm">
-              <ContactRow icon={Mail} label="Email" value={lead.email} />
+              <EditableEmailRow leadId={lead._id} email={lead.email} />
               <ContactRow icon={Phone} label="Phone" value={lead.phone} />
               <ContactRow
                 icon={Globe}
@@ -715,6 +716,97 @@ function MessageThread({
       )}
     </section>
  );
+}
+
+/** Inline-editable email so leads imported without one (or sample data)
+ *  can be pointed at a real inbox before outreach. */
+function EditableEmailRow({
+  leadId,
+  email,
+}: {
+  leadId: Id<"leads">;
+  email?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(email ?? "");
+  const [saving, setSaving] = useState(false);
+  const updateLead = useMutation(api.leads.update);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      // Empty string clears the field; anything else becomes the new address.
+      await updateLead({ id: leadId, email: draft.trim() });
+      toast(
+        draft.trim() ? "Email updated — you can send outreach to it now" : "Email cleared",
+      );
+      setEditing(false);
+    } catch {
+      toast.error("Couldn't update the email — try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-start gap-2">
+      <dt className="label-caps flex w-16 shrink-0 items-center gap-1 pt-1 text-muted-foreground/70">
+        <Mail className="size-3" /> Email
+      </dt>
+      <dd className="min-w-0 flex-1">
+        {editing ? (
+          <div className="flex items-center gap-1.5">
+            <Input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="you@yourmail.com"
+              type="email"
+              autoFocus
+              className="h-7 text-sm"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void save();
+                if (e.key === "Escape") {
+                  setEditing(false);
+                  setDraft(email ?? "");
+                }
+              }}
+            />
+            <Button size="sm" className="h-7 px-2 text-xs" onClick={() => void save()} disabled={saving}>
+              Save
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs"
+              onClick={() => {
+                setEditing(false);
+                setDraft(email ?? "");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <span className="min-w-0 flex-1 truncate text-sm">
+              {email || <span className="text-muted-foreground/60">not set</span>}
+            </span>
+            <button
+              type="button"
+              aria-label="Edit email"
+              onClick={() => {
+                setDraft(email ?? "");
+                setEditing(true);
+              }}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Pencil className="size-3" />
+            </button>
+          </div>
+        )}
+      </dd>
+    </div>
+  );
 }
 
 function ContactRow({
