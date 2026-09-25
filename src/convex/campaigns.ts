@@ -186,6 +186,7 @@ export const sendAll = action({
 
     const campaign = await ctx.runQuery(internal.campaigns.getOwned, { id, userId });
     if (!campaign) throw new Error("Campaign not found.");
+    const fromName = await ctx.runQuery(internal.campaigns.senderName, { userId });
 
     const rows = await ctx.runQuery(internal.campaigns.pendingRows, { id, userId });
     if (rows.length === 0) {
@@ -232,6 +233,7 @@ export const sendAll = action({
           to: email,
           subject: campaign.subject ?? campaign.name,
           text: campaign.body,
+          fromName: fromName ?? undefined,
         });
 
         await ctx.runMutation(internal.campaigns.markRow, {
@@ -303,6 +305,15 @@ export const getOwned = internalQuery({
     const campaign = await ctx.db.get(id);
     if (!campaign || campaign.userId !== userId) return null;
     return campaign;
+  },
+});
+
+/** From display name for Gmail SMTP delivery ("Rahul Sharma <you@gmail.com>"). */
+export const senderName = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const user = await ctx.db.get(userId);
+    return user?.company ?? user?.name ?? null;
   },
 });
 

@@ -167,7 +167,7 @@ export function OutreachComposer({
         : preview.body;
     try {
       await navigator.clipboard.writeText(text);
-      toast("Copied — paste it into Gmail or LinkedIn");
+      toast("Copied! Paste into Gmail and hit send — no domain needed.");
     } catch {
       toast.error("Couldn't copy — select the text manually.");
     }
@@ -204,6 +204,12 @@ export function OutreachComposer({
             <p className="mt-2 text-xs text-muted-foreground">
               Everything is logged in the lead thread and Inbox — replies can be recorded there too.
             </p>
+            {channel === "email" && (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Provider being picky with a recipient? <span className="font-medium text-foreground">Copy message</span> →
+                paste into your Gmail → send — works for every address, no domain required.
+              </p>
+            )}
           </div>
         ) : (
           <>

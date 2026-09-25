@@ -160,11 +160,15 @@ const FAQS = [
   },
   {
     q: "Can I actually send emails from DealFlow AI?",
-    a: "Yes. Connect a Resend API key in your workspace settings and outreach emails are delivered directly from the app — every send is logged to the lead's thread. Without a key, DealFlow AI still drafts, personalizes and tracks everything; you just copy the message into Gmail or LinkedIn yourself.",
+    a: "Yes — and you don't need to buy a domain. Connect your Gmail (a free App Password, one minute of setup) and outreach emails go out from your own address to anyone: Gmail, Outlook, Yahoo or company inboxes. Every send is logged to the lead's thread. Prefer to stay hands-on? Compose → Copy message → paste into Gmail works with zero setup, and DealFlow AI still tracks it.",
+  },
+  {
+    q: "Do I need my own domain to send email?",
+    a: "No. Your Gmail address is a perfectly deliverable sender — connecting it makes DealFlow AI send as you, with no DNS records or purchases. A custom domain only becomes interesting later, when you want a branded sender for high-volume campaigns.",
   },
   {
     q: "What integrations are supported?",
-    a: "Email delivery is live via Resend. AI briefs run on OpenAI when a key is configured, with a built-in heuristic engine as fallback. Gmail, Outlook, LinkedIn and calendar sync are on the roadmap — the Integrations page in-app shows exactly what's connected.",
+    a: "Email delivery is live through your own Gmail or the optional Resend API. AI briefs run on OpenAI when a key is configured, with a built-in heuristic engine as fallback. Gmail, Outlook, LinkedIn and calendar sync are on the roadmap — the Integrations page in-app shows exactly what's connected.",
   },
   {
     q: "Can I cancel anytime?",

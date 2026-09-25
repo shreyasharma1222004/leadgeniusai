@@ -2,7 +2,19 @@ import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { Bot, CheckCircle2, Circle, Mail, Plug, Send, Sparkles } from "lucide-react";
+import { api } from "@/convex/_generated/api";
+import { useQuery } from "convex/react";
+import {
+  Bot,
+  CheckCircle2,
+  Circle,
+  Copy,
+  KeyRound,
+  Mail,
+  Plug,
+  Send,
+  Sparkles,
+} from "lucide-react";
 import { Link } from "react-router";
 
 interface IntegrationRow {
@@ -16,24 +28,29 @@ interface IntegrationRow {
 
 export default function IntegrationsPage() {
   useAuth();
+  const delivery = useQuery(api.settings.deliveryStatus, {});
+
+  const gmailActive = delivery?.provider === "gmail";
 
   const integrations: IntegrationRow[] = [
     {
-      icon: Send,
-      name: "Email sending — built-in gateway",
-      status: "live",
-      description:
-        "Sends your outreach emails for real — single messages and full campaigns, straight from DealFlow AI.",
-      how: "Uses the platform's built-in email service. Zero setup — the key is injected automatically and usage is billed to your workspace.",
+      icon: Mail,
+      name: "Gmail — send to anyone, no domain",
+      status: gmailActive ? "live" : "keys-needed",
+      envVar: "GMAIL_USER + GMAIL_APP_PASSWORD",
+      description: gmailActive
+        ? `Connected. Your outreach now goes out from your own Gmail address (${delivery?.from ?? ""}) and can reach any recipient on any provider.`
+        : "Connect your own Gmail account and DealFlow AI sends email as you — to anyone, on Gmail, Outlook, Yahoo or company addresses. No domain, no DNS records, nothing to buy.",
+      how: "Uses Gmail's SMTP with an App Password Google issues for free. Recipients see your name and address, so replies land in your normal inbox.",
     },
     {
       icon: Send,
-      name: "Resend — bring your own sender",
+      name: "Resend — dedicated sender API",
       status: "keys-needed",
       envVar: "RESEND_API_KEY",
       description:
-        "Optional upgrade: deliver from your own verified domain instead of the built-in gateway.",
-      how: "Set a RESEND_API_KEY environment variable (plus RESEND_FROM_EMAIL for a custom sender). When present, every send automatically routes through Resend.",
+        "Optional upgrade for volume sending. Test mode delivers only to your own signup address; a verified domain lifts that limit.",
+      how: "Set a RESEND_API_KEY environment variable (plus RESEND_FROM_EMAIL once your domain is verified). Sits behind Gmail in the delivery order, so it only applies when Gmail isn't configured.",
     },
     {
       icon: Sparkles,
@@ -65,6 +82,117 @@ export default function IntegrationsPage() {
       <p className="-mt-3 mb-4 text-sm text-muted-foreground">
         What's connected, what a key unlocks, and exactly how each one behaves.
       </p>
+
+      {/* Gmail setup guide — the no-domain path */}
+      <section
+        className={cn(
+          "mb-6 rounded-lg border p-5",
+          gmailActive ? "border-[#D4FF4F]/60 bg-[#D4FF4F]/10" : "border-border bg-card",
+        )}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <Mail className="size-5 text-[#5c7a00]" />
+          <h2 className="text-sm font-semibold">Send to anybody — connect your Gmail</h2>
+          {gmailActive ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#D4FF4F] px-2 py-0.5 text-[10px] font-medium text-[#191918]">
+              <CheckCircle2 className="size-3" /> Connected as {delivery?.from}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-secondary-foreground">
+              <Circle className="size-3" /> Not connected
+            </span>
+          )}
+        </div>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+          No domain needed. Google gives every account free App Passwords; one
+          minute of setup and every email you send from DealFlow AI goes out
+          from your own address — reaching real prospects on Gmail, Outlook,
+          Yahoo and company mailboxes alike.
+        </p>
+
+        {!gmailActive && (
+          <ol className="mt-4 space-y-3">
+            {[
+              {
+                title: "Turn on 2-Step Verification",
+                body: (
+                  <>
+                    Go to{" "}
+                    <a
+                      className="font-medium text-[#5c7a00] underline underline-offset-2"
+                      href="https://myaccount.google.com/security"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      myaccount.google.com/security
+                    </a>{" "}
+                    and switch on 2-Step Verification if it isn't already.
+                  </>
+                ),
+              },
+              {
+                title: "Create an App Password",
+                body: (
+                  <>
+                    Visit{" "}
+                    <a
+                      className="font-medium text-[#5c7a00] underline underline-offset-2"
+                      href="https://myaccount.google.com/apppasswords"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      myaccount.google.com/apppasswords
+                    </a>
+                    , name it "DealFlow AI", and copy the 16-character password
+                    Google shows you.
+                  </>
+                ),
+              },
+              {
+                title: "Set two environment variables",
+                body: (
+                  <>
+                    In your deployment's environment variables, add{" "}
+                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+                      GMAIL_USER
+                    </code>{" "}
+                    = your full Gmail address and{" "}
+                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+                      GMAIL_APP_PASSWORD
+                    </code>{" "}
+                    = the 16-character code. DealFlow AI picks them up on the
+                    next send automatically.
+                  </>
+                ),
+              },
+              {
+                title: "Send a test",
+                body: "Compose outreach to any lead and hit Send — it should arrive from your Gmail address within seconds. Check the lead's thread if anything fails.",
+              },
+            ].map((step, i) => (
+              <li key={step.title} className="flex gap-3">
+                <span className="tabular flex size-6 shrink-0 items-center justify-center rounded-full bg-[#D4FF4F] text-[11px] font-semibold text-[#191918]">
+                  {i + 1}
+                </span>
+                <div>
+                  <p className="text-sm font-medium">{step.title}</p>
+                  <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+                    {step.body}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        {gmailActive && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Every new send — single outreach and full campaigns — now routes
+            through your Gmail. If a send ever fails, the exact Gmail error
+            appears in the lead's thread.
+          </p>
+        )}
+      </section>
 
       <div className="space-y-3">
         {integrations.map((row) => (
@@ -122,13 +250,41 @@ export default function IntegrationsPage() {
       </div>
 
       <div className="mt-4 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4 text-xs leading-relaxed text-muted-foreground">
+        {gmailActive ? <Send className="mt-0.5 size-4 shrink-0" /> : <Copy className="mt-0.5 size-4 shrink-0" />}
+        <p>
+          {gmailActive ? (
+            <>
+              Gmail is your active sender, so Compose → Send delivers for real
+              to any address. Copy message still works as a manual fallback.
+            </>
+          ) : (
+            <>
+              While Gmail isn't connected yet, the fastest way to work real
+              prospects is Compose → <span className="font-medium text-foreground">Copy message</span> →
+              paste into your Gmail → send manually — DealFlow AI logs the touch
+              either way. Connecting Gmail upgrades that to one-click automated
+              sending.
+            </>
+          )}
+        </p>
+      </div>
+
+      <div className="mt-4 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4 text-xs leading-relaxed text-muted-foreground">
         <Plug className="mt-0.5 size-4 shrink-0" />
         <p>
-          The built-in email gateway and AI assistant work out of the box — no keys needed. Optional
-          keys (Resend, OpenAI) are set as environment variables and read server-side; they are never
-          exposed in the client bundle (the OpenAI key is the one exception by design and stays
-          browser-side for direct calls). Gmail, Outlook, LinkedIn and calendar sync remain on the
-          roadmap; the copy-and-send flow covers them today.
+          Keys are read server-side from environment variables and never exposed
+          in the client bundle (the OpenAI key is the one exception by design
+          and stays browser-side for direct calls). Gmail, Outlook and LinkedIn
+          sync remain on the roadmap; the copy-and-send flow covers them today.
+        </p>
+      </div>
+
+      <div className="mt-4 flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4 text-xs leading-relaxed text-muted-foreground">
+        <KeyRound className="mt-0.5 size-4 shrink-0" />
+        <p>
+          Security note: your Gmail App Password lives only in your deployment's
+          environment variables — it's never stored in the database, never sent
+          to the browser, and can be revoked any time from your Google account.
         </p>
       </div>
 

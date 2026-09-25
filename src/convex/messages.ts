@@ -132,7 +132,7 @@ export const remove = mutation({
   },
 });
 
-// ── Email sending (built-in gateway; Resend if RESEND_API_KEY is set) ─────
+// ── Email sending (Gmail SMTP → Resend → built-in gateway) ─────────────
 
 export const sendEmail = action({
   args: {
@@ -151,32 +151,38 @@ export const sendEmail = action({
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("You need to sign in to do that.");
 
-    const email = await ctx.runQuery(internal.messages.getLeadEmail, {
+    const target = await ctx.runQuery(internal.messages.getLeadEmail, {
       leadId,
       userId,
     });
-    if (!email) {
+    if (!target?.email) {
       throw new Error(
         "This lead has no email address. Add one on the lead page, or copy the message instead.",
       );
     }
 
     const result = await ctx.runAction(internal.emailDelivery.deliverEmail, {
-      to: email,
+      to: target.email,
       subject,
       text: body,
+      fromName: target.fromName ?? undefined,
     });
     return result;
   },
 });
 
-/** Ownership-checked email lookup used by the send action. */
+/** Ownership-checked email + sender-name lookup used by the send action. */
 export const getLeadEmail = internalQuery({
   args: { leadId: v.id("leads"), userId: v.id("users") },
   handler: async (ctx, { leadId, userId }) => {
     const lead = await ctx.db.get(leadId);
     if (!lead || lead.userId !== userId) return null;
-    return lead.email ?? null;
+    const sender = await ctx.db.get(userId);
+    return {
+      email: lead.email ?? null,
+      // Display name on the From header for Gmail SMTP sends.
+      fromName: sender?.company ?? sender?.name ?? null,
+    };
   },
 });
 
