@@ -43,6 +43,8 @@ export const deliverEmail = internalAction({
     const gmailUser = process.env.GMAIL_USER;
     const gmailPass = process.env.GMAIL_APP_PASSWORD;
     if (gmailUser && gmailPass) {
+      // Branding: GMAIL_FROM_NAME (env) wins, else the sender's own name.
+      const display = process.env.GMAIL_FROM_NAME ?? fromName;
       let info: { messageId?: string };
       try {
         const transport = nodemailer.createTransport({
@@ -50,7 +52,7 @@ export const deliverEmail = internalAction({
           auth: { user: gmailUser, pass: gmailPass },
         });
         info = await transport.sendMail({
-          from: fromName ? `"${fromName.replace(/"/g, "")}" <${gmailUser}>` : gmailUser,
+          from: display ? `"${display.replace(/"/g, "")}" <${gmailUser}>` : gmailUser,
           to,
           subject,
           text,
