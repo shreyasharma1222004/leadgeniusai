@@ -8,10 +8,11 @@ import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { money } from "@/lib/growth";
 import { timeAgo } from "@/lib/format";
+import { GOAL_PERIOD_LABELS, type GoalPeriod } from "@/lib/goalEngine";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
-import { ArrowRight, ArrowUpRight, Check, X } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Building2, Check, Sparkles, X } from "lucide-react";
 import { Link } from "react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -72,9 +73,21 @@ export default function OverviewPage() {
   const messages = useQuery(api.messages.listForUser, {});
   const followUps = useQuery(api.followUps.listForUser, {});
   const campaigns = useQuery(api.campaigns.list, {});
+  const profile = useQuery(api.business.myProfile, {});
+  const goals = useQuery(api.business.goalsWithProgress, {});
   const setFollowUpStatus = useMutation(api.leads.setFollowUpStatus);
+  // AI Business Brief action + state (hooks must live above the loading return)
+  const businessBriefAction = useAction(api.ai.businessBrief);
+  const [aiBrief, setAiBrief] = useState<Awaited<ReturnType<typeof businessBriefAction>>>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
+  const [planDismissed, setPlanDismissed] = useState<Set<string>>(new Set());
 
-  const ready = leads !== undefined && messages !== undefined && followUps !== undefined && campaigns !== undefined;
+  const ready =
+    leads !== undefined &&
+    messages !== undefined &&
+    followUps !== undefined &&
+    campaigns !== undefined;
 
   const first = (user?.name ?? "there").split(" ")[0];
 
@@ -138,7 +151,104 @@ export default function OverviewPage() {
     toast("Removed from today's plan.");
   };
 
-  const [planDismissed, setPlanDismissed] = useState<Set<string>>(new Set());
+  // ── AI Business Brief (Phase 1 §5) — server-side action over profile,
+  // goals and real CRM metrics. Falls back honestly when unavailable.
+  const generateBrief = async () => {
+    setBriefLoading(true);
+    setBriefError(null);
+    try {
+      const industries = Object.entries(
+        leads.reduce<Record<string, number>>((acc, l) => {
+          if (l.industry) {
+            const k = l.industry.trim();
+            acc[k] = (acc[k] ?? 0) + 1;
+          }
+          return acc;
+        }, {}),
+      )
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name, count]) => ({ name, count }));
+      const sources = Object.entries(
+        leads.reduce<Record<string, number>>((acc, l) => {
+          if (l.source) {
+            const k = l.source.trim();
+            acc[k] = (acc[k] ?? 0) + 1;
+          }
+          return acc;
+        }, {}),
+      )
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name, count]) => ({ name, count }));
+      const result = await businessBriefAction({
+        profile: profile
+          ? {
+              businessName: profile.businessName,
+              industry: profile.industry,
+              businessType: profile.businessType,
+              businessModel: profile.businessModel,
+              products: profile.products,
+              targetGeography: profile.targetGeography,
+              teamSize: profile.teamSize,
+              currentMonthlyRevenue: profile.currentMonthlyRevenue,
+              targetMonthlyRevenue: profile.targetMonthlyRevenue,
+              acquisitionChannels: profile.acquisitionChannels,
+              avgSalesCycle: profile.avgSalesCycle,
+              primaryChallenge: profile.primaryChallenge,
+            }
+          : undefined,
+        goals: (goals ?? []).map((g) => ({
+          name: g.name,
+          kind: g.kind,
+          period: g.period,
+          targetValue: g.targetValue,
+          current: g.current,
+          unit: g.unit,
+        })),
+        metrics: {
+          totalLeads: metrics.totalLeads,
+          qualified: metrics.qualified,
+          activeOpportunities: metrics.activeOpportunities,
+          proposalsOut: metrics.proposalsOut,
+          wonCount: metrics.wonCount,
+          lostCount: leads.filter((l) => l.status === "lost").length,
+          pipelineValue: metrics.pipelineValue,
+          weightedPipeline: metrics.weightedPipeline,
+          wonRevenue: metrics.wonRevenue,
+          avgDealSize: metrics.avgDealSize,
+          repliesReceived: messages.filter((m) => m.direction === "received").length,
+          messagesSent: messages.filter((m) => m.direction === "sent").length,
+          overdueFollowUps: metrics.overdueFollowUps,
+          unreadReplies: metrics.unreadReplies,
+          activeCampaigns: metrics.activeCampaigns,
+          conversionRate: metrics.conversionRate,
+          responseRate: metrics.responseRate,
+        },
+        activity: {
+          recentMessages: recent
+            .slice(0, 5)
+            .map(
+              (m) =>
+                `${m.direction === "received" ? "Reply from" : "Sent to"} ${leadName(m.leadId)}: "${m.body.slice(0, 60)}${m.body.length > 60 ? "…" : ""}"`,
+            ),
+          topIndustries: industries,
+          topSources: sources,
+        },
+      });
+      if (!result) {
+        setBriefError(
+          "The AI brief isn't available right now (no OPENAI_API_KEY configured, or the provider couldn't be reached). The deterministic brief above always works from your data.",
+        );
+      } else {
+        setAiBrief(result);
+      }
+    } catch {
+      setBriefError("Generating the brief failed — try again in a moment.");
+    } finally {
+      setBriefLoading(false);
+    }
+  };
 
   return (
     <AppShell title="Dashboard">
@@ -149,6 +259,43 @@ export default function OverviewPage() {
           {greeting}, {first}.
         </h1>
         <p className="mt-1.5 text-[15px] text-muted-foreground">Here's what matters today.</p>
+
+        {/* ── Business snapshot chips (Phase 1 §4) ─────────────────────── */}
+        {profile === undefined ? null : profile === null ? (
+          <div className="mt-5">
+            <Link
+              to="/business"
+              className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-[#b3a894] hover:text-foreground"
+            >
+              <Building2 className="size-3.5" /> Add your business context → sharper recommendations
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Link
+              to="/business"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 font-medium text-foreground transition-colors hover:border-[#b3a894]"
+            >
+              <Building2 className="size-3.5" />
+              {profile.businessName}
+            </Link>
+            {profile.industry && (
+              <span className="rounded-full border border-border bg-secondary px-2.5 py-1">
+                {profile.industry}
+              </span>
+            )}
+            {profile.targetGeography && (
+              <span className="rounded-full border border-border bg-secondary px-2.5 py-1">
+                Sells to: {profile.targetGeography}
+                </span>
+            )}
+            {profile.primaryChallenge && (
+              <span className="rounded-full border border-[#a06b3c]/35 bg-[#a06b3c]/[0.08] px-2.5 py-1 text-[#82552e]">
+                Focus: {profile.primaryChallenge}
+              </span>
+            )}
+          </div>
+        )}
 
         {leads.length === 0 ? (
           <EmptyWorkspace />
@@ -189,8 +336,8 @@ export default function OverviewPage() {
           {/* ── KPI strip ──────────────────────────────────────────────────── */}
           <section className="mt-10 grid grid-cols-2 gap-x-8 gap-y-8 border-t border-border pt-8 sm:grid-cols-3 lg:grid-cols-6">
             {[
-              { label: "Pipeline value", value: money(metrics.pipelineValue), hint: `${metrics.activeOpportunities} active` },
-              { label: "Won revenue", value: money(metrics.wonRevenue), hint: `${metrics.wonCount} deal${metrics.wonCount === 1 ? "" : "s"}`, tone: "olive" },
+              { label: "Pipeline value", value: money(metrics.pipelineValue), hint: `${metrics.activeOpportunities} open · weighted ${money(metrics.weightedPipeline)} (estimate)` },
+              { label: "Won revenue", value: money(metrics.wonRevenue), hint: `actual closed · ${metrics.wonCount} deal${metrics.wonCount === 1 ? "" : "s"}`, tone: "olive" },
               { label: "Conversion", value: `${metrics.conversionRate}%`, hint: "leads → won" },
               { label: "Avg deal size", value: metrics.avgDealSize === null ? "—" : money(metrics.avgDealSize), hint: "closed deals" },
               { label: "Response rate", value: `${metrics.responseRate}%`, hint: `${metrics.unreadReplies} unread` },
@@ -209,6 +356,141 @@ export default function OverviewPage() {
                 <p className="text-[11px] text-muted-foreground/60">{kpi.hint}</p>
               </motion.div>
             ))}
+          </section>
+
+          {/* ── Goal progress (Phase 1 §2/§4) ───────────────────────────── */}
+          {goals !== undefined && goals.length > 0 && (
+            <section className="mt-12 border-t border-border pt-8">
+              <div className="flex items-center justify-between">
+                <p className="label-caps text-muted-foreground">Goal progress</p>
+                <Link to="/business" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
+                  Manage goals
+                </Link>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {goals.slice(0, 3).map((g) => (
+                  <div key={g._id} className="rounded-lg border border-border bg-card p-4">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="truncate text-sm font-medium">{g.name}</p>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {GOAL_PERIOD_LABELS[g.period as GoalPeriod]}
+                      </span>
+                    </div>
+                    {g.current !== null && g.targetValue !== undefined ? (
+                      <>
+                        <p className="tabular mt-2 text-xl font-semibold tracking-tight">
+                          {g.formatted}
+                          <span className="text-sm font-normal text-muted-foreground">
+                            {" "}/ {g.targetValue.toLocaleString()}
+                          </span>
+                        </p>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e4ddcf]">
+                          <div
+                            className={cn(
+                              "h-full rounded-full",
+                              (g.progress ?? 0) >= 1 ? "bg-[#53634a]" : "bg-[#171613]",
+                            )}
+                            style={{ width: `${Math.max(3, (g.progress ?? 0) * 100)}%` }}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <p className="mt-2 text-xs text-[#82552e]">Not measurable automatically</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ── AI Business Brief (Phase 1 §5) ──────────────────────────── */}
+          <section className="mt-12 border-t border-border pt-8">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="label-caps text-muted-foreground">AI business brief</p>
+                <p className="mt-0.5 text-xs text-muted-foreground/60">
+                  An estimate and recommendation based on your business profile, goals, and CRM
+                  records — never market guesses.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => void generateBrief()}
+                disabled={briefLoading}
+              >
+                <Sparkles className="size-3.5" />
+                {briefLoading ? "Analyzing…" : aiBrief ? "Regenerate brief" : "Generate brief"}
+              </Button>
+            </div>
+
+            {briefError && (
+              <p className="mt-3 rounded-md border border-[#a06b3c]/35 bg-[#a06b3c]/[0.08] px-3 py-2 text-xs leading-relaxed text-[#82552e]">
+                {briefError}
+              </p>
+            )}
+
+            {!briefError && !aiBrief && !briefLoading && (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Generates a structured situation report with growth opportunities, risks, and next
+                actions — grounded strictly in your workspace data. If there isn't enough data yet,
+                it will say so rather than guess.
+              </p>
+            )}
+
+            {briefLoading && (
+              <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                <Skeleton className="h-40 rounded-lg" />
+                <Skeleton className="h-40 rounded-lg" />
+                <Skeleton className="h-40 rounded-lg" />
+              </div>
+            )}
+
+            {aiBrief && !briefLoading && (
+              <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <p className="label-caps text-[10px] text-muted-foreground/70">Current situation</p>
+                  <p className="mt-2 text-sm leading-relaxed">{aiBrief.situation}</p>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <p className="label-caps text-[10px] text-muted-foreground/70">Growth opportunities</p>
+                  <ul className="mt-2 space-y-1.5">
+                    {aiBrief.opportunities.map((o, i) => (
+                      <li key={i} className="flex gap-2 text-[13px] leading-relaxed">
+                        <span aria-hidden className="mt-[7px] size-1 shrink-0 rounded-full bg-[#53634a]" />
+                        {o}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <p className="label-caps text-[10px] text-muted-foreground/70">Risks & bottlenecks</p>
+                  <ul className="mt-2 space-y-1.5">
+                    {aiBrief.risks.map((r, i) => (
+                      <li key={i} className="flex gap-2 text-[13px] leading-relaxed">
+                        <span aria-hidden className="mt-[7px] size-1 shrink-0 rounded-full bg-[#a8442f]" />
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-4 lg:col-span-2">
+                  <p className="label-caps text-[10px] text-muted-foreground/70">Recommended next actions</p>
+                  <ol className="mt-2 list-decimal space-y-1.5 pl-4">
+                    {aiBrief.actions.map((a, i) => (
+                      <li key={i} className="text-[13px] leading-relaxed">{a}</li>
+                    ))}
+                  </ol>
+                </div>
+                <div className="flex items-start rounded-lg border border-border bg-muted/40 p-4 text-[11px] leading-relaxed text-muted-foreground">
+                  AI-generated estimate from your workspace data ({new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}).
+                  {aiBrief.insufficientData
+                    ? " The model flagged that there isn't enough data yet for a reliable recommendation — treat these as directional only."
+                    : " Verify against your own knowledge before acting — consequential actions always ask for confirmation."}
+                </div>
+              </div>
+            )}
           </section>
 
           {/* ── Opportunities + Today's plan ───────────────────────────────── */}
@@ -266,6 +548,9 @@ export default function OverviewPage() {
                           <Link to={a.to} className="block truncate text-sm font-medium underline-offset-4 hover:underline">
                             {a.title}
                           </Link>
+                          {a.why && (
+                            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{a.why}</p>
+                          )}
                         </div>
                         <div className="flex shrink-0 gap-0.5">
                           <button

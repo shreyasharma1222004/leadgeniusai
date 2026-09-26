@@ -2,7 +2,7 @@ import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
-import { askAssistant } from "@/lib/assistant";
+import { askAssistant, type CopilotContext } from "@/lib/assistant";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
@@ -19,11 +19,11 @@ interface Turn {
 
 const SUGGESTIONS = [
   "What should I work on today?",
-  "Which leads should I follow up with?",
-  "Show me my hottest opportunities",
-  "Which deals are worth the most?",
+  "What is blocking my growth?",
+  "Am I on track for my goals?",
+  "Which opportunities deserve attention?",
   "Any stalled leads?",
-  "How much revenue have I won?",
+  "What should I improve?",
 ];
 
 export default function AssistantPage() {
@@ -32,6 +32,24 @@ export default function AssistantPage() {
   const messages = useQuery(api.messages.listForUser, {});
   const followUps = useQuery(api.followUps.listForUser, {});
   const campaigns = useQuery(api.campaigns.list, {});
+  const profile = useQuery(api.business.myProfile, {});
+  const goals = useQuery(api.business.goalsWithProgress, {});
+  const { user } = useAuth();
+
+  const growthGoalLabel =
+    user?.growthGoal === "find-customers"
+      ? "find more customers"
+      : user?.growthGoal === "increase-sales"
+        ? "increase sales"
+        : user?.growthGoal === "improve-conversion"
+          ? "improve conversion"
+          : user?.growthGoal === "manage-clients"
+            ? "manage clients better"
+            : user?.growthGoal === "build-brand"
+              ? "build the brand"
+              : user?.growthGoal === "improve-operations"
+                ? "improve operations"
+                : undefined;
 
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
@@ -40,9 +58,34 @@ export default function AssistantPage() {
   const ready =
     leads !== undefined && messages !== undefined && followUps !== undefined && campaigns !== undefined;
 
+  // Business context (Phase 1 §7) — profile + goals feed the Copilot so its
+  // answers use what the business sells, who it targets, and real goal math.
+  const context: CopilotContext | undefined =
+    profile !== undefined
+      ? {
+          businessName: profile?.businessName,
+          industry: profile?.industry,
+          businessModel: profile?.businessModel,
+          products: profile?.products,
+          targetGeography: profile?.targetGeography,
+          primaryChallenge: profile?.primaryChallenge,
+          growthGoal: growthGoalLabel,
+          goals: (goals ?? []).map((g) => ({
+            name: g.name,
+            period: g.period,
+            current: g.current,
+            targetValue: g.targetValue,
+            unit: g.unit,
+            formatted: g.formatted,
+            progress: g.progress,
+            unavailableReason: g.unavailableReason,
+          })),
+        }
+      : undefined;
+
   const ask = (question: string) => {
     if (!question.trim() || !ready) return;
-    const answer = askAssistant(question, leads, messages, followUps, campaigns);
+    const answer = askAssistant(question, leads, messages, followUps, campaigns, context);
     setTurns((prev) => [
       ...prev,
       { role: "user", text: question },

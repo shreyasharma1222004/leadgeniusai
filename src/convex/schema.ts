@@ -171,6 +171,51 @@ const schema = defineSchema(
     })
       .index("by_campaign", ["campaignId"])
       .index("by_lead", ["leadId"]),
+
+    // ── Phase 1: Business Intelligence ──────────────────────────────────
+
+    /**
+     * Business Profile (Phase 1 §1) — one per authenticated user. All fields
+     * optional except name; owned by userId per the existing pattern. Created
+     * lazily on first save; the onboarding flow also populates it.
+     */
+    businessProfiles: defineTable({
+      userId: v.id("users"),
+      businessName: v.string(),
+      website: v.optional(v.string()),
+      industry: v.optional(v.string()),
+      businessType: v.optional(v.string()),
+      businessModel: v.optional(v.string()),
+      products: v.optional(v.string()),
+      description: v.optional(v.string()),
+      targetGeography: v.optional(v.string()),
+      currency: v.optional(v.string()),
+      teamSize: v.optional(v.string()),
+      currentMonthlyRevenue: v.optional(v.number()),
+      targetMonthlyRevenue: v.optional(v.number()),
+      acquisitionChannels: v.optional(v.array(v.string())),
+      avgSalesCycle: v.optional(v.string()),
+      primaryChallenge: v.optional(v.string()),
+    }).index("by_user", ["userId"]),
+
+    /**
+     * Business Goals (Phase 1 §2) — many per user. `currentValue` is NEVER
+     * stored: it is always derived from real CRM records by goalEngine.ts at
+     * read time. `manualCurrentValue` exists only for kinds that cannot be
+     * derived (retention/custom) — guarded server-side so measurable kinds
+     * always use derived data.
+     */
+    businessGoals: defineTable({
+      userId: v.id("users"),
+      name: v.string(),
+      kind: v.string(), // GoalKind from src/lib/goalEngine.ts
+      targetValue: v.optional(v.number()),
+      period: v.string(), // GoalPeriod from src/lib/goalEngine.ts
+      status: v.string(), // active | achieved | paused
+      deadline: v.optional(v.number()),
+      manualCurrentValue: v.optional(v.number()),
+      createdAt: v.number(),
+    }).index("by_user", ["userId"]),
   },
   {
     schemaValidation: false,

@@ -17,6 +17,7 @@ import {
   BarChart3,
   Bell,
   Bot,
+  Building2,
   CalendarClock,
   Inbox,
   Kanban,
@@ -49,6 +50,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { label: "Dashboard", icon: House, to: "/dashboard" },
       { label: "AI Copilot", icon: Bot, to: "/assistant" },
+      { label: "Business", icon: Building2, to: "/business" },
     ],
   },
   {

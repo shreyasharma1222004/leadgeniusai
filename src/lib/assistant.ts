@@ -15,6 +15,30 @@ export interface AssistantReply {
 }
 
 /**
+ * Business context (Phase 1 §7) — profile + goals the Copilot can reason
+ * over. All values come from the caller's own workspace; nothing invented.
+ */
+export interface CopilotContext {
+  businessName?: string;
+  industry?: string;
+  businessModel?: string;
+  products?: string;
+  targetGeography?: string;
+  primaryChallenge?: string;
+  growthGoal?: string;
+  goals: {
+    name: string;
+    period: string;
+    current: number | null;
+    targetValue?: number;
+    unit: "money" | "count" | "percent";
+    formatted: string | null;
+    progress: number | null;
+    unavailableReason?: string;
+  }[];
+}
+
+/**
  * Rule-based assistant brain. Answers real questions from the workspace data —
  * no fabricated facts, every claim is backed by the numbers it computed.
  */
@@ -24,6 +48,7 @@ export function askAssistant(
   messages: Message[],
   followUps: FollowUpRow[],
   campaigns: CampaignRow[],
+  context?: CopilotContext,
 ): AssistantReply {
   const q = question.toLowerCase().trim();
 
@@ -243,6 +268,107 @@ export function askAssistant(
             : `${won.length} deal${won.length === 1 ? "" : "s"} won, $${total.toLocaleString()} in recorded revenue:`,
       bullets: valued.map((l) => `${l.name} — $${(l.dealValue ?? 0).toLocaleString()}`),
       leadIds: valued.slice(0, 5).map((l) => l._id),
+    };
+  }
+
+  // ── Business-context intents (Phase 1 §7) ─────────────────────────────
+
+  // Goals / on-track question — grounded in derived goal progress
+  if (context && /\b(goal|goals|on track|target|revenue goal|quota)\b/.test(q)) {
+    if (context.goals.length === 0) {
+      return {
+        intent: "goals",
+        text: "You haven't set any goals yet.",
+        bullets: [
+          "Set one on the Business page — revenue, qualified leads, or meetings — and I'll track real progress from your CRM.",
+        ],
+        leadIds: [],
+      };
+    }
+    const lines = context.goals.map((g) => {
+      if (g.current === null) {
+        return `${g.name} — ${g.unavailableReason ?? "not measurable from CRM data"}`;
+      }
+      if (g.progress === null || g.targetValue === undefined) {
+        return `${g.name} — currently ${g.formatted} (no target set)`;
+      }
+      const pct = Math.round(g.progress * 100);
+      return `${g.name} — ${g.formatted} of ${g.targetValue.toLocaleString()} (${pct}%) — ${pct >= 100 ? "achieved 🎉" : pct >= 70 ? "on track" : "behind"}`;
+    });
+    return {
+      intent: "goals",
+      text: `Goal progress, computed from your CRM${context.businessName ? ` for ${context.businessName}` : ""}:`,
+      bullets: lines,
+      leadIds: [],
+    };
+  }
+
+  // Growth blockers — evidence-based from real records + stated challenge
+  if (
+    context &&
+    /\b(block|blocker|blockers|blocking|bottleneck|what.s stopping|what.s holding|holding me back|improve)\b/.test(
+      q,
+    )
+  ) {
+    const now = Date.now();
+    const lines: string[] = [];
+    const noFollowUp = leads.filter(
+      (l) =>
+        !["won", "lost", "new"].includes(l.status) &&
+        l.nextFollowUpAt === undefined &&
+        l.lastContactedAt !== undefined,
+    ).length;
+    const dormant = leads.filter(
+      (l) =>
+        !["won", "lost", "new"].includes(l.status) &&
+        l.lastContactedAt !== undefined &&
+        now - l.lastContactedAt > 10 * 86400_000,
+    ).length;
+    const noValue = leads.filter(
+      (l) =>
+        ["proposal", "interested", "discovery"].includes(l.status) && l.dealValue === undefined,
+    ).length;
+    if (context.primaryChallenge) {
+      lines.push(`Your stated challenge: “${context.primaryChallenge}”.`);
+    }
+    if (noFollowUp > 0) lines.push(`${noFollowUp} engaged lead${noFollowUp === 1 ? " has" : "s have"} no follow-up scheduled — momentum leaks there.`);
+    if (dormant > 0) lines.push(`${dormant} lead${dormant === 1 ? " has" : "s have"} gone quiet for 10+ days.`);
+    if (noValue > 0) lines.push(`${noValue} deep-pipeline deal${noValue === 1 ? "" : "s"} have no value attached — forecast stays blind until they're dated and valued.`);
+    if (lines.length === 0) {
+      return {
+        intent: "blockers",
+        text: "Nothing is visibly blocking growth right now.",
+        bullets: [
+          leads.length < 5
+            ? "With fewer than 5 leads the pipeline itself is the constraint — top of funnel needs volume first."
+            : "Follow-ups are scheduled, replies are handled, and deals are valued. A campaign or new lead batch is the next lever.",
+        ],
+        leadIds: [],
+      };
+    }
+    return {
+      intent: "blockers",
+      text: "Based on your records, these are the visible bottlenecks:",
+      bullets: lines,
+      leadIds: [],
+    };
+  }
+
+  // Business context question
+  if (context && /\b(my business|what do i sell|who do i sell|my industry|my niche|icp|target market)\b/.test(q)) {
+    const parts = [
+      context.businessName,
+      context.industry,
+      context.products,
+      context.targetGeography ? `sells to ${context.targetGeography}` : undefined,
+    ].filter(Boolean);
+    return {
+      intent: "business-context",
+      text: parts.length
+        ? `Here's the business context you've saved:`
+        : "No business profile saved yet — set it up on the Business page so I can tailor answers.",
+      bullets: parts.length ? parts.map((p) => String(p)) : [],
+      leadIds: [],
     };
   }
 

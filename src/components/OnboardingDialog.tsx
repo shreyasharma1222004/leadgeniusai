@@ -47,6 +47,7 @@ const TEAM_SIZES = ["Just me", "2–5", "6–20", "20+"] as const;
 export function OnboardingDialog() {
   const { user } = useAuth();
   const updateBusiness = useMutation(api.users.updateBusinessProfile);
+  const saveProfile = useMutation(api.business.saveProfile);
   const open = Boolean(user && user.onboardedAt === undefined);
 
   const [step, setStep] = useState(0);
@@ -61,18 +62,49 @@ export function OnboardingDialog() {
 
   if (!open) return null;
 
+  // Skip: mark onboarding done WITHOUT writing answers into the profile.
+  const skip = async () => {
+    setSaving(true);
+    try {
+      await updateBusiness({ onboarded: true });
+      setStep(0);
+    } catch {
+      toast.error("Couldn't save — you can update them later in Settings.");
+      setSaving(false);
+    }
+  };
+
   const finish = async () => {
     setSaving(true);
     try {
+      const revenueGoalNumber = revenueGoal
+        ? Number(revenueGoal.replace(/[^0-9.]/g, "")) || undefined
+        : undefined;
       await updateBusiness({
         businessType: businessType || undefined,
         sells: sells.trim() || undefined,
         audience: audience.trim() || undefined,
         growthGoal: growthGoal || undefined,
-        revenueGoal: revenueGoal ? Number(revenueGoal.replace(/[^0-9.]/g, "")) || undefined : undefined,
+        revenueGoal: revenueGoalNumber,
         teamSize: teamSize || undefined,
         onboarded: true,
       });
+      // Phase 1 §3: onboarding answers flow into the Business Profile so they
+      // actually drive the dashboard, AI brief, and Copilot. Only fields the
+      // user answered are written (undefined fields are never erased), and a
+      // profile name is only seeded when none exists yet.
+      try {
+        await saveProfile({
+          businessName: user?.company?.trim() || "My business",
+          businessType: businessType || undefined,
+          products: sells.trim() || undefined,
+          targetGeography: audience.trim() || undefined,
+          teamSize: teamSize || undefined,
+          targetMonthlyRevenue: revenueGoalNumber,
+        });
+      } catch {
+        // Profile save is best-effort — the user can complete it on /business.
+      }
       toast("You're set — welcome to Dealflow AI.");
       setStep(0);
     } catch {
@@ -221,7 +253,7 @@ export function OnboardingDialog() {
             <Button
               type="button"
               variant="ghost"
-              onClick={finish}
+              onClick={() => void skip()}
               disabled={saving}
               className="text-muted-foreground"
             >

@@ -338,6 +338,8 @@ export function computeOpportunities(
 export interface PlanAction {
   id: string;
   title: string;
+  /** Why this was selected — always a real signal from the record. */
+  why: string;
   to: string; // where to do it
   kind: "followup" | "reply" | "review" | "deal" | "outreach";
   priority: number;
@@ -356,9 +358,18 @@ export function computeTodayPlan(
 
   // Highest value first: overdue follow-ups, then replies, then today's dues
   for (const f of followUps.filter((f) => f.status === "pending" && f.dueAt < now).slice(0, 2)) {
+    const lead = leads.find((l) => l._id === f.leadId);
+    const leadWhy = [
+      lead?.dealValue !== undefined ? money(lead.dealValue) : null,
+      (lead?.score ?? 0) >= 70 ? `score ${lead?.score}` : null,
+      lead ? statusLabelOf(canonicalStatus(lead.status)) : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
     actions.push({
       id: `fu-${f._id}`,
       title: `Follow up with ${leadName(f.leadId)}${f.note ? ` — ${f.note}` : ""}`,
+      why: `Overdue — last due ${timeAgo(f.dueAt)}${leadWhy ? ` · ${leadWhy}` : ""}`,
       to: `/leads/${f.leadId}`,
       kind: "followup",
       priority: 0,
@@ -368,6 +379,7 @@ export function computeTodayPlan(
     actions.push({
       id: "inbox",
       title: `Answer ${metrics.unreadReplies} waiting repl${metrics.unreadReplies === 1 ? "y" : "ies"}`,
+      why: "Replies waiting — response speed drives reply-to-meeting rates",
       to: "/inbox",
       kind: "reply",
       priority: 1,
@@ -379,6 +391,7 @@ export function computeTodayPlan(
     actions.push({
       id: `fu-${f._id}`,
       title: `Due today: ${f.note || `follow up with ${leadName(f.leadId)}`}`,
+      why: "Scheduled for today",
       to: `/leads/${f.leadId}`,
       kind: "followup",
       priority: 2,
@@ -388,6 +401,7 @@ export function computeTodayPlan(
     actions.push({
       id: "proposals",
       title: `Check on ${metrics.proposalsOut} open proposals`,
+      why: `${metrics.proposalsOut} deals sitting at Proposal — the stage where deals stall most`,
       to: "/pipeline",
       kind: "deal",
       priority: 3,
@@ -398,6 +412,7 @@ export function computeTodayPlan(
     actions.push({
       id: "outreach",
       title: `Send first outreach to ${Math.min(fresh.length, 3)} new leads`,
+      why: `${fresh.length} leads added but never contacted — first-touch speed is controllable`,
       to: "/leads",
       kind: "outreach",
       priority: 4,

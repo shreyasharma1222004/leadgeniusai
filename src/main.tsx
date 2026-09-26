@@ -25,6 +25,7 @@ const AnalyticsPage = lazy(() => import("./pages/Analytics.tsx"));
 const ContactsPage = lazy(() => import("./pages/Contacts.tsx"));
 const TemplatesPage = lazy(() => import("./pages/Templates.tsx"));
 const IntegrationsPage = lazy(() => import("./pages/Integrations.tsx"));
+const BusinessPage = lazy(() => import("./pages/Business.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -143,6 +144,14 @@ createRoot(document.getElementById("root")!).render(
               />
               {/* Legacy home route — kept so old links keep working. */}
               <Route path="/overview" element={<Navigate to="/dashboard" replace />} />
+              <Route
+                path="/business"
+                element={
+                  <RequireAuth>
+                    <BusinessPage />
+                  </RequireAuth>
+                }
+              />
               <Route
                 path="/leads"
                 element={
