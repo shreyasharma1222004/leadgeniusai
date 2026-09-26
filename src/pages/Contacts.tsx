@@ -34,7 +34,7 @@ export default function ContactsPage() {
       <AppShell title="Contacts">
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-14 animate-pulse rounded-lg bg-muted/60" />
+            <div key={i} className="h-14 animate-pulse rounded-lg bg-card" />
           ))}
         </div>
       </AppShell>
@@ -59,8 +59,8 @@ export default function ContactsPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center">
-          <div className="flex size-11 items-center justify-center rounded-full bg-foreground text-background">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
             <Users className="size-5" />
           </div>
           <h2 className="mt-4 text-lg font-semibold tracking-tight">
@@ -78,11 +78,11 @@ export default function ContactsPage() {
             <Link
               key={lead._id}
               to={`/leads/${lead._id}`}
-              className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-foreground/30"
+              className="depth-card depth-card-hover group flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3"
             >
               <span
                 aria-hidden
-                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground"
+                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground transition-all duration-200 group-hover:border-[#8B5CF6]/50 group-hover:text-[#c4b5fd] group-hover:shadow-[0_0_12px_rgba(139,92,246,0.3)]"
               >
                 {initials(lead.name)}
               </span>

@@ -93,7 +93,7 @@ export default function InboxPage() {
         Every message you've sent or received — outreach history across all leads.
       </p>
 
-      <div className="mb-4 flex items-center rounded-md border border-border p-0.5" style={{ width: "fit-content" }}>
+      <div className="mb-4 flex items-center rounded-md border border-border bg-white/[0.03] p-0.5" style={{ width: "fit-content" }}>
         {(["all", "sent", "received"] as const).map((key) => (
           <button
             key={key}
@@ -101,9 +101,9 @@ export default function InboxPage() {
             aria-pressed={filter === key}
             onClick={() => setFilter(key)}
             className={cn(
-              "rounded px-2.5 py-1.5 text-xs font-medium capitalize transition-colors",
+              "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium capitalize transition-colors",
               filter === key
-                ? "bg-foreground text-background"
+                ? "bg-[#8B5CF6]/20 text-[#c4b5fd] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)]"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -113,8 +113,8 @@ export default function InboxPage() {
       </div>
 
       {visible.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center">
-          <div className="flex size-11 items-center justify-center rounded-full bg-foreground text-background">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
             <InboxIcon className="size-5" />
           </div>
           <h2 className="mt-4 text-lg font-semibold tracking-tight">
@@ -137,8 +137,10 @@ export default function InboxPage() {
               <div
                 key={m._id}
                 className={cn(
-                  "rounded-lg border bg-card px-4 py-3",
-                  unreadMsg ? "border-[#A9E813]/60" : "border-border",
+                  "rounded-lg border bg-card px-4 py-3 transition-colors hover:border-white/15",
+                  unreadMsg
+                    ? "border-[#8B5CF6]/50 bg-[#8B5CF6]/[0.05] shadow-[0_0_18px_rgba(139,92,246,0.1)]"
+                    : "border-border",
                 )}
               >
                 <div className="flex flex-wrap items-center gap-2">
@@ -146,7 +148,9 @@ export default function InboxPage() {
                     aria-hidden
                     className={cn(
                       "flex size-6 shrink-0 items-center justify-center rounded-full",
-                      m.direction === "sent" ? "bg-muted text-muted-foreground" : "bg-foreground text-background",
+                      m.direction === "sent"
+                        ? "border border-white/10 bg-white/[0.05] text-muted-foreground"
+                        : "border border-[#8B5CF6]/40 bg-[#8B5CF6]/15 text-[#c4b5fd]",
                     )}
                   >
                     {m.direction === "sent" ? <Send className="size-3" /> : <CornerDownLeft className="size-3" />}

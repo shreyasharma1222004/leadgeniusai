@@ -41,7 +41,7 @@ export default function TemplatesPage() {
       <AppShell title="Templates">
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-44 animate-pulse rounded-lg bg-muted/60" />
+            <div key={i} className="h-44 animate-pulse rounded-xl bg-card" />
           ))}
         </div>
       </AppShell>
@@ -114,8 +114,8 @@ export default function TemplatesPage() {
       </p>
 
       {templates.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center">
-          <div className="flex size-11 items-center justify-center rounded-full bg-foreground text-background">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
             <BookMarked className="size-5" />
           </div>
           <h2 className="mt-4 text-lg font-semibold tracking-tight">No templates yet.</h2>
@@ -129,7 +129,10 @@ export default function TemplatesPage() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {templates.map((tpl) => (
-            <div key={tpl._id} className="flex flex-col rounded-lg border border-border bg-card p-4">
+            <div
+              key={tpl._id}
+              className="depth-card depth-card-hover flex flex-col rounded-xl border border-border bg-card p-4"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{tpl.name}</p>
@@ -219,9 +222,9 @@ export default function TemplatesPage() {
                     aria-pressed={form.channel === c}
                     onClick={() => setForm((f) => ({ ...f, channel: c }))}
                     className={
-                      "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors " +
+                      "cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-colors " +
                       (form.channel === c
-                        ? "border-foreground bg-foreground text-background"
+                        ? "border-[#8B5CF6]/60 bg-[#8B5CF6]/15 text-[#c4b5fd]"
                         : "border-border text-muted-foreground hover:text-foreground")
                     }
                   >

@@ -189,7 +189,7 @@ export default function Landing() {
           <Link to="/" className="flex items-center gap-2">
             <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
             <span className="text-sm font-semibold tracking-tight">
-              DealFlow<span className="text-[#A9E813]"> AI</span>
+              DealFlow<span className="text-[#A855F7]"> AI</span>
             </span>
           </Link>
           <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
@@ -246,22 +246,26 @@ export default function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="mx-auto max-w-6xl px-4 pb-16 pt-16 md:px-8 md:pb-24 md:pt-24">
+      <section className="relative mx-auto max-w-6xl px-4 pb-16 pt-16 md:px-8 md:pb-24 md:pt-24">
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 mx-auto h-[420px] max-w-4xl">
+          <div className="ambient-float absolute left-1/4 top-8 size-64 rounded-full bg-[#8B5CF6]/20 blur-[110px]" />
+          <div className="absolute right-[15%] top-28 size-56 rounded-full bg-[#67E8F9]/10 blur-[110px]" />
+        </div>
         <div className="mx-auto max-w-3xl text-center">
-          <p className="label-caps text-muted-foreground">
-            AI-powered sales, without the sales team
+          <p className="ai-chip label-caps mx-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-muted-foreground">
+            <Sparkles className="size-3 text-[#c4b5fd]" /> AI-powered sales, without the sales team
           </p>
           <h1 className="mt-4 text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
             Turn leads into customers.
             <br />
-            <span className="text-muted-foreground">Without hiring a salesperson.</span>
+            <span className="bg-gradient-to-r from-[#c4b5fd] to-[#A855F7] bg-clip-text text-transparent">Without hiring a salesperson.</span>
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
             DealFlow AI researches your prospects, drafts the opening move, and keeps
             follow-ups on schedule — all in one simple sales workspace.
           </p>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-            <Button asChild size="lg" className="h-11 px-6 text-[15px]">
+            <Button asChild size="lg" className="glow-primary h-11 bg-[#8B5CF6] px-6 text-[15px] text-white hover:bg-[#7C4DF0]">
               <Link to="/auth">
                 Start for free <ArrowRight className="size-4" />
               </Link>
@@ -292,7 +296,7 @@ export default function Landing() {
           <ol className="mt-10 grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-5">
             {WORKFLOW.map((w, i) => (
               <li key={w.step} className="bg-card p-5">
-                <p className="tabular text-xs font-medium text-muted-foreground">
+                <p className="tabular text-xs font-medium text-[#A855F7]">
                   {w.step}
                 </p>
                 <p className="mt-2 text-sm font-semibold leading-snug">{w.title}</p>
@@ -319,7 +323,9 @@ export default function Landing() {
           <div className="mt-10 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f) => (
               <div key={f.title} className="bg-card p-6">
-                <f.icon className="size-5" />
+                <span className="flex size-10 items-center justify-center rounded-lg border border-[#8B5CF6]/25 bg-[#8B5CF6]/[0.08] text-[#c4b5fd]">
+                  <f.icon className="size-5" />
+                </span>
                 <p className="mt-3 text-sm font-semibold">{f.title}</p>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
                   {f.body}
@@ -372,9 +378,9 @@ export default function Landing() {
                     aria-pressed={active}
                     onClick={() => setYearly(label === "Yearly")}
                     className={cn(
-                      "rounded px-3 py-1.5 text-xs font-medium transition-colors",
+                      "cursor-pointer rounded px-3 py-1.5 text-xs font-medium transition-colors",
                       active
-                        ? "bg-foreground text-background"
+                        ? "bg-[#8B5CF6]/20 text-[#c4b5fd] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)]"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -383,7 +389,7 @@ export default function Landing() {
                 );
               })}
             </div>
-            <span className="rounded-full bg-[#D4FF4F] px-2 py-0.5 text-[11px] font-medium text-[#191918]">
+            <span className="rounded-full border border-[#8B5CF6]/40 bg-[#8B5CF6]/10 px-2 py-0.5 text-[11px] font-medium text-[#c4b5fd]">
               Save 20% annually
             </span>
           </div>
@@ -394,16 +400,16 @@ export default function Landing() {
                 <div
                   key={tier.name}
                   className={cn(
-                    "flex flex-col rounded-lg border bg-card p-5",
+                    "depth-card-hover flex flex-col rounded-xl border bg-card p-5",
                     tier.highlight
-                      ? "border-foreground shadow-[0_0_0_1px_var(--foreground)]"
+                      ? "border-[#8B5CF6]/60 shadow-[0_0_28px_rgba(139,92,246,0.15)]"
                       : "border-border",
                   )}
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold">{tier.name}</p>
                     {tier.highlight && (
-                      <span className="rounded-full bg-[#D4FF4F] px-2 py-0.5 text-[10px] font-medium text-[#191918]">
+                      <span className="rounded-full border border-[#8B5CF6]/50 bg-[#8B5CF6]/15 px-2 py-0.5 text-[10px] font-medium text-[#c4b5fd]">
                         Popular
                       </span>
                     )}
@@ -426,7 +432,7 @@ export default function Landing() {
                       <li key={f} className="flex items-start gap-2 text-[13px]">
                         <span
                           aria-hidden
-                          className="mt-[7px] size-1 shrink-0 rounded-full bg-[#A9E813]"
+                          className="mt-[7px] size-1 shrink-0 rounded-full bg-[#8B5CF6]"
                         />
                         {f}
                       </li>
@@ -464,13 +470,13 @@ export default function Landing() {
       {/* Final CTA */}
       <section className="py-20 md:py-28">
         <div className="mx-auto max-w-6xl px-4 md:px-8">
-          <div className="rounded-xl border border-foreground/80 bg-[#141414] px-6 py-16 text-center text-[#F5F1E8] md:px-16">
-            <p className="label-caps text-[#F5F1E8]/60">DealFlow AI</p>
+          <div className="ai-gradient-border rounded-xl px-6 py-16 text-center md:px-16">
+            <p className="label-caps text-[#c4b5fd]">✦ DealFlow AI</p>
             <h2 className="mx-auto mt-4 max-w-2xl text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
               Your next customer could already be in your lead list.
             </h2>
             <div className="mt-7 flex flex-wrap justify-center gap-3">
-              <Button asChild size="lg" className="h-11 bg-[#D4FF4F] px-6 text-[#191918] hover:bg-[#C4EF3F]">
+              <Button asChild size="lg" className="glow-primary h-11 bg-[#8B5CF6] px-6 text-white hover:bg-[#7C4DF0]">
                 <Link to="/auth">
                   Start for free <ArrowRight className="size-4" />
                 </Link>
@@ -479,12 +485,12 @@ export default function Landing() {
                 asChild
                 size="lg"
                 variant="outline"
-                className="h-11 border-[#F5F1E8]/25 bg-transparent px-6 text-[#F5F1E8] hover:bg-[#F5F1E8]/10 hover:text-[#F5F1E8]"
+                className="h-11 border-white/15 bg-white/[0.03] px-6 text-foreground hover:bg-white/[0.08] hover:text-foreground"
               >
                 <Link to="/auth">Create free account</Link>
               </Button>
             </div>
-            <p className="mt-4 text-xs text-[#F5F1E8]/50">
+            <p className="mt-4 text-xs text-muted-foreground">
               Find the right leads. Say the right thing. Follow up at the right time.
             </p>
           </div>
@@ -498,7 +504,7 @@ export default function Landing() {
             <img src={logo} alt="" className="size-5 rounded" />
             <span>
               © {new Date().getFullYear()} DealFlow
-              <span className="text-[#A9E813]"> AI</span> — demo product
+              <span className="text-[#A855F7]"> AI</span> — demo product
             </span>
           </div>
           <nav className="flex gap-5">
@@ -537,7 +543,7 @@ function SectionHeading({
 /** Static, hand-crafted replica of the actual /leads screen — not a stock graphic. */
 function DashboardPreview() {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-[0_24px_80px_-32px_rgba(20,20,20,0.35)]">
+    <div className="depth-card overflow-hidden rounded-xl border border-border bg-card shadow-[0_32px_90px_-30px_rgba(0,0,0,0.65)]">
       {/* window chrome */}
       <div className="flex h-10 items-center gap-1.5 border-b border-border bg-sidebar px-4">
         <span className="size-2.5 rounded-full border border-border bg-background" />
@@ -553,7 +559,7 @@ function DashboardPreview() {
           <div className="flex items-center gap-2 px-1.5 pb-4">
             <img src={logo} alt="" className="size-5 rounded" />
             <span className="text-xs font-semibold">
-              DealFlow<span className="text-[#A9E813]"> AI</span>
+              DealFlow<span className="text-[#A855F7]"> AI</span>
             </span>
           </div>
           {["Leads", "Pipeline", "Campaigns", "Inbox", "Tasks"].map((item, i) => (
@@ -562,7 +568,7 @@ function DashboardPreview() {
               className={cn(
                 "mb-0.5 flex items-center gap-2 rounded px-2 py-1.5 text-[11px]",
                 i === 0
-                  ? "bg-accent font-medium text-accent-foreground"
+                  ? "nav-pill-active font-medium"
                   : "text-muted-foreground/70",
               )}
             >
@@ -576,17 +582,17 @@ function DashboardPreview() {
         <div className="min-w-0 border-r border-border">
           <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
             <span className="text-xs font-semibold">Leads</span>
-            <span className="rounded bg-foreground px-1.5 py-0.5 text-[10px] font-medium text-background">
+            <span className="rounded bg-[#8B5CF6] px-1.5 py-0.5 text-[10px] font-medium text-white shadow-[0_0_10px_rgba(139,92,246,0.4)]">
               + Add lead
             </span>
           </div>
           <div>
             {[
-              { n: "Sarah Mitchell", c: "Nova Studio", s: "Interested", cls: "bg-[#E9F5C8] text-[#42521A]", sc: "87" },
-              { n: "Priya Raman", c: "Elevate Commerce", s: "Meeting", cls: "bg-[#F0F9C8] text-[#3F4E15]", sc: "92" },
-              { n: "Daniel Osei", c: "Northstar Digital", s: "Replied", cls: "bg-[#EFEAD9] text-[#4A4636]", sc: "81" },
-              { n: "Elena Vasquez", c: "Orbit Labs", s: "New", cls: "bg-secondary text-secondary-foreground", sc: "78" },
-              { n: "Tom Alvarez", c: "PixelCraft", s: "New", cls: "bg-secondary text-secondary-foreground", sc: "71" },
+              { n: "Sarah Mitchell", c: "Nova Studio", s: "Interested", cls: "border border-[#A855F7]/35 bg-[#A855F7]/[0.12] text-[#d8b4fe]", sc: "87" },
+              { n: "Priya Raman", c: "Elevate Commerce", s: "Meeting", cls: "border border-[#FCD34D]/25 bg-[#FCD34D]/[0.08] text-[#fde68a]", sc: "92" },
+              { n: "Daniel Osei", c: "Northstar Digital", s: "Replied", cls: "border border-[#8B5CF6]/30 bg-[#8B5CF6]/[0.10] text-[#c4b5fd]", sc: "81" },
+              { n: "Elena Vasquez", c: "Orbit Labs", s: "New", cls: "border border-white/10 bg-white/[0.04] text-muted-foreground", sc: "78" },
+              { n: "Tom Alvarez", c: "PixelCraft", s: "New", cls: "border border-white/10 bg-white/[0.04] text-muted-foreground", sc: "71" },
             ].map((r) => (
               <div
                 key={r.n}
@@ -625,21 +631,21 @@ function DashboardPreview() {
             ].map(([label, value]) => (
               <div key={label as string} className="flex items-center gap-2">
                 <span className="w-16 text-[9px] text-muted-foreground">{label}</span>
-                <div className="h-1 flex-1 overflow-hidden rounded-full bg-border">
-                  <div className="h-full bg-foreground/60" style={{ width: `${value}%` }} />
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
+                  <div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A855F7]" style={{ width: `${value}%` }} />
                 </div>
               </div>
             ))}
           </div>
-          <div className="mt-3 rounded-md border border-[#D4FF4F]/60 bg-[#D4FF4F]/15 p-2">
-            <p className="text-[9px] font-medium text-[#42521A]">Pain point</p>
-            <p className="mt-0.5 text-[10px] leading-snug text-[#4A5218]">
+          <div className="mt-3 rounded-md border border-[#8B5CF6]/30 bg-[#8B5CF6]/[0.08] p-2">
+            <p className="text-[9px] font-medium text-[#c4b5fd]">✦ Pain point</p>
+            <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
               Their current website experience may limit conversion from paid traffic.
             </p>
           </div>
           <div className="mt-3 flex gap-1">
-            <span className="rounded bg-foreground px-1.5 py-1 text-[9px] font-medium text-background">
-              Generate outreach
+            <span className="rounded bg-[#8B5CF6] px-1.5 py-1 text-[9px] font-medium text-white shadow-[0_0_10px_rgba(139,92,246,0.4)]">
+              ✦ Generate outreach
             </span>
             <span className="rounded border border-border px-1.5 py-1 text-[9px] text-muted-foreground">
               Follow-up

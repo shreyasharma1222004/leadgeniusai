@@ -68,7 +68,7 @@ export default function TasksPage() {
       </p>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex items-center rounded-md border border-border p-0.5">
+        <div className="flex items-center rounded-md border border-border bg-white/[0.03] p-0.5">
           {chips.map((chip) => (
             <button
               key={chip.key}
@@ -76,9 +76,9 @@ export default function TasksPage() {
               aria-pressed={filter === chip.key}
               onClick={() => setFilter(chip.key)}
               className={cn(
-                "rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
+                "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
                 filter === chip.key
-                  ? "bg-foreground text-background"
+                  ? "bg-[#8B5CF6]/20 text-[#c4b5fd] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)]"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -89,8 +89,8 @@ export default function TasksPage() {
       </div>
 
       {visible.length === 0 && skipped.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-14 text-center">
-          <div className="flex size-11 items-center justify-center rounded-full bg-foreground text-background">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-14 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
             <CalendarClock className="size-5" />
           </div>
           <p className="mt-4 text-sm font-medium">Nothing in “{chips.find((c) => c.key === filter)?.label}”.</p>
@@ -106,7 +106,7 @@ export default function TasksPage() {
               <div
                 key={f._id}
                 className={cn(
-                  "flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3",
+                  "flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:border-white/15",
                   overdue ? "border-destructive/40" : "border-border",
                 )}
               >
@@ -115,12 +115,12 @@ export default function TasksPage() {
                   className={cn(
                     "size-2 shrink-0 rounded-full",
                     f.status === "done"
-                      ? "bg-[#A9E813]"
+                      ? "bg-[#8B5CF6] shadow-[0_0_8px_rgba(139,92,246,0.5)]"
                       : overdue
                         ? "bg-destructive"
                         : f.status === "skipped"
                           ? "bg-border"
-                          : "bg-foreground/40",
+                          : "bg-[#8B5CF6]/40",
                   )}
                 />
                 <div className="min-w-0 flex-1">

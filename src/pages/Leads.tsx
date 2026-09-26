@@ -1,7 +1,9 @@
 import { AddLeadDialog } from "@/components/AddLeadDialog";
 import { ImportCsvDialog } from "@/components/ImportCsvDialog";
 import { AppShell } from "@/components/AppShell";
+import { LeadSidePanel } from "@/components/LeadSidePanel";
 import { OutreachComposer } from "@/components/OutreachComposer";
+import { AIButton, SPRING_SOFT, TiltCard } from "@/components/spatial";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -29,18 +31,21 @@ import { initials, timeAgo } from "@/lib/format";
 import { LEAD_STATUSES, LEAD_STATUS_LABELS, statusClasses, statusLabel } from "@/lib/leadStatus";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
+import { motion } from "framer-motion";
 import {
+  CalendarCheck,
   ChevronDown,
   ListFilter,
   MoreHorizontal,
+  Reply,
   Search,
   Send,
   Sparkles,
   Trash2,
+  Trophy,
   Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
 import { toast } from "sonner";
 
 type Doc2 = Doc<"leads">;
@@ -58,6 +63,7 @@ export default function LeadsPage() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTargets, setComposeTargets] = useState<Doc2[]>([]);
+  const [panelLead, setPanelLead] = useState<Doc2 | null>(null);
 
   const filtered = useMemo(() => {
     if (!leads) return [];
@@ -128,6 +134,18 @@ export default function LeadsPage() {
     setComposeOpen(true);
   };
 
+  const openPanelCompose = (lead: Doc2) => {
+    setPanelLead(null);
+    openCompose([lead]);
+  };
+
+  const setPanelStatus = (lead: Doc2, status: string) => {
+    void runBulk(
+      () => mutationHelpers.bulkSetStatus({ ids: [lead._id], status }),
+      "Status updated",
+    );
+  };
+
   return (
     <AppShell
       title="Leads"
@@ -138,6 +156,11 @@ export default function LeadsPage() {
         </>
       }
     >
+      {/* Floating metric hero */}
+      {leads && leads.length > 0 && (
+        <MetricsHero leads={leads} followUpDue={followUpDue} />
+      )}
+
       {/* Toolbar */}
       <div className="mb-4 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -152,7 +175,7 @@ export default function LeadsPage() {
             />
           </div>
 
-          <div className="flex items-center rounded-md border border-border p-0.5">
+          <div className="flex items-center rounded-md border border-border bg-white/[0.03] p-0.5">
             {(
               [
                 { key: "all", label: `All` },
@@ -164,9 +187,9 @@ export default function LeadsPage() {
                 onClick={() => setQuickFilter(t.key)}
                 aria-pressed={quickFilter === t.key}
                 className={cn(
-                  "rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
                   quickFilter === t.key
-                    ? "bg-foreground text-background"
+                    ? "bg-[#8B5CF6]/20 text-[#c4b5fd] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)]"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -185,7 +208,7 @@ export default function LeadsPage() {
                 <ChevronDown className="size-3.5 opacity-50" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuContent align="end" className="depth-pop w-44">
               <DropdownMenuLabel>Filter by status</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setStatusFilter("all")}>
@@ -200,27 +223,26 @@ export default function LeadsPage() {
           </DropdownMenu>
         </div>
 
-        {/* Bulk bar */}
+        {/* Bulk bar — violet action surface */}
         {selected.size > 0 && (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#D4FF4F]/60 bg-[#D4FF4F]/10 px-3 py-2">
-            <span className="text-xs font-medium">
+          <div className="stage-enter flex flex-wrap items-center gap-2 rounded-lg border border-[#8B5CF6]/40 bg-[#8B5CF6]/[0.08] px-3 py-2 shadow-[0_0_24px_rgba(139,92,246,0.12)]">
+            <span className="text-xs font-medium text-[#c4b5fd]">
               {selected.size} selected
             </span>
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              <Button
+              <AIButton
                 size="sm"
-                className="h-7 gap-1 text-xs"
                 onClick={() => openCompose(selectedLeads)}
               >
-                <Sparkles className="size-3" /> Compose outreach
-              </Button>
+                Compose outreach
+              </AIButton>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" className="h-7 gap-1 text-xs">
                     Change status <ChevronDown className="size-3 opacity-60" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="depth-pop">
                   {LEAD_STATUSES.map((s) => (
                     <DropdownMenuItem
                       key={s}
@@ -279,11 +301,11 @@ export default function LeadsPage() {
         }} />
       ) : (
         <>
-          {/* Desktop table */}
-          <div className="hidden rounded-lg border border-border bg-card md:block">
+          {/* Desktop table — spatial data workspace */}
+          <div className="depth-card hidden overflow-hidden rounded-xl md:block">
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent">
+                <TableRow className="border-border/70 hover:bg-transparent">
                   <TableHead className="w-10 pl-4">
                     <Checkbox
                       checked={allChecked ? true : someChecked ? "indeterminate" : false}
@@ -303,8 +325,12 @@ export default function LeadsPage() {
               </TableHeader>
               <TableBody>
                 {filtered.map((lead) => (
-                  <TableRow key={lead._id} className="group">
-                    <TableCell className="pl-4">
+                  <TableRow
+                    key={lead._id}
+                    onClick={() => setPanelLead(lead)}
+                    className="group cursor-pointer border-border/60 transition-colors hover:bg-white/[0.035]"
+                  >
+                    <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={selected.has(lead._id)}
                         onCheckedChange={() => toggleOne(lead._id)}
@@ -312,25 +338,22 @@ export default function LeadsPage() {
                       />
                     </TableCell>
                     <TableCell>
-                      <Link
-                        to={`/leads/${lead._id}`}
-                        className="flex items-center gap-2.5"
-                      >
+                      <span className="flex items-center gap-2.5">
                         <span
                           aria-hidden
-                          className="flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-[10px] font-semibold text-muted-foreground"
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-[10px] font-semibold text-muted-foreground transition-all duration-200 group-hover:border-[#8B5CF6]/50 group-hover:text-[#c4b5fd] group-hover:shadow-[0_0_12px_rgba(139,92,246,0.35)]"
                         >
                           {initials(lead.name)}
                         </span>
                         <span className="flex flex-col">
-                          <span className="text-sm font-medium underline-offset-4 group-hover:underline">
+                          <span className="text-sm font-medium">
                             {lead.name}
                           </span>
                           <span className="text-xs text-muted-foreground lg:hidden">
                             {lead.company ?? "—"}
                           </span>
                         </span>
-                      </Link>
+                      </span>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <span className="text-sm text-muted-foreground">
@@ -357,15 +380,42 @@ export default function LeadsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       {lead.score !== undefined ? (
-                        <span className="tabular text-sm font-medium">
-                          {lead.score}
-                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span
+                            className={cn(
+                              "tabular text-sm font-medium",
+                              lead.score >= 70
+                                ? "text-[#c4b5fd]"
+                                : lead.score >= 40
+                                  ? "text-foreground"
+                                  : "text-muted-foreground",
+                            )}
+                          >
+                            {lead.score}
+                          </span>
+                          <span className="h-0.5 w-10 overflow-hidden rounded-full bg-white/[0.08]">
+                            <span
+                              className={cn(
+                                "block h-full rounded-full",
+                                lead.score >= 70
+                                  ? "bg-[#8B5CF6]"
+                                  : lead.score >= 40
+                                    ? "bg-white/30"
+                                    : "bg-white/15",
+                              )}
+                              style={{ width: `${lead.score}%` }}
+                            />
+                          </span>
+                        </div>
                       ) : (
                         <button
-                          onClick={() => mutationHelpers.analyze(lead)}
-                          className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            mutationHelpers.analyze(lead);
+                          }}
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-[#c4b5fd] underline-offset-2 transition-colors hover:bg-[#8B5CF6]/10 hover:underline"
                         >
-                          analyze
+                          <Sparkles className="size-3" /> Analyze
                         </button>
                       )}
                     </TableCell>
@@ -379,25 +429,27 @@ export default function LeadsPage() {
                         {lead.nextFollowUpAt ? timeAgo(lead.nextFollowUpAt) : "—"}
                       </span>
                     </TableCell>
-                    <TableCell className="pr-4">
-                      <LeadRowMenu
-                        lead={lead}
-                        onAnalyze={() => mutationHelpers.analyze(lead)}
-                        onCompose={() => openCompose([lead])}
-                        onStatus={(s) =>
-                          runBulk(
-                            () =>
-                              mutationHelpers.bulkSetStatus({ ids: [lead._id], status: s }),
-                            "Status updated",
-                          )
-                        }
-                        onDelete={() =>
-                          runBulk(
-                            () => mutationHelpers.bulkDelete({ ids: [lead._id] }),
-                            "Lead deleted",
-                          )
-                        }
-                      />
+                    <TableCell className="pr-4" onClick={(e) => e.stopPropagation()}>
+                      <div className="opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+                        <LeadRowMenu
+                          lead={lead}
+                          onAnalyze={() => mutationHelpers.analyze(lead)}
+                          onCompose={() => openCompose([lead])}
+                          onStatus={(s) =>
+                            runBulk(
+                              () =>
+                                mutationHelpers.bulkSetStatus({ ids: [lead._id], status: s }),
+                              "Status updated",
+                            )
+                          }
+                          onDelete={() =>
+                            runBulk(
+                              () => mutationHelpers.bulkDelete({ ids: [lead._id] }),
+                              "Lead deleted",
+                            )
+                          }
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -410,16 +462,17 @@ export default function LeadsPage() {
             {filtered.map((lead) => (
               <div
                 key={lead._id}
-                className="rounded-lg border border-border bg-card p-4"
+                onClick={() => setPanelLead(lead)}
+                className="depth-card cursor-pointer rounded-xl border border-border bg-card p-4"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <Link to={`/leads/${lead._id}`} className="min-w-0">
+                  <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{lead.name}</p>
                     <p className="truncate text-xs text-muted-foreground">
                       {lead.jobTitle ? `${lead.jobTitle} · ` : ""}
                       {lead.company ?? "—"}
                     </p>
-                  </Link>
+                  </div>
                   <span
                     className={cn(
                       "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
@@ -437,18 +490,22 @@ export default function LeadsPage() {
                     {lead.nextFollowUpAt ? timeAgo(lead.nextFollowUpAt) : "—"}
                   </span>
                 </div>
-                <div className="mt-3 flex gap-2">
-                  <Button asChild variant="outline" size="sm" className="flex-1">
-                    <Link to={`/leads/${lead._id}`}>Open</Link>
-                  </Button>
+                <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
                   <Button
                     variant="outline"
                     size="sm"
                     className="flex-1"
+                    onClick={() => setPanelLead(lead)}
+                  >
+                    Open
+                  </Button>
+                  <AIButton
+                    size="sm"
+                    className="flex-1"
                     onClick={() => mutationHelpers.analyze(lead)}
                   >
-                    <Sparkles className="size-3.5" /> Analyze
-                  </Button>
+                    Analyze
+                  </AIButton>
                 </div>
                 <Checkbox
                   className="sr-only"
@@ -465,6 +522,14 @@ export default function LeadsPage() {
           </p>
         </>
       )}
+      {/* Floating lead detail panel (Layer 4) */}
+      <LeadSidePanel
+        lead={panelLead}
+        onClose={() => setPanelLead(null)}
+        onCompose={openPanelCompose}
+        onAnalyze={(l) => mutationHelpers.analyze(l)}
+        onStatus={setPanelStatus}
+      />
       {/* Shared outreach composer */}
       <OutreachComposer
         leads={composeTargets}
@@ -472,6 +537,70 @@ export default function LeadsPage() {
         onOpenChange={setComposeOpen}
       />
     </AppShell>
+  );
+}
+
+/* ── Floating metric hero — Layer-2 cards with real counts ───────────────── */
+
+function MetricsHero({ leads, followUpDue }: { leads: Doc2[]; followUpDue: number }) {
+  const cards = useMemo(() => {
+    const total = leads.length;
+    const contacted = leads.filter(
+      (l) =>
+        l.lastContactedAt !== undefined ||
+        ["contacted", "replied", "interested", "meeting", "won"].includes(l.status),
+    ).length;
+    const replies = leads.filter((l) =>
+      ["replied", "interested", "meeting", "won"].includes(l.status),
+    ).length;
+    const meetings = leads.filter((l) => l.status === "meeting" || l.status === "won").length;
+    const won = leads.filter((l) => l.status === "won").length;
+
+    const pct = (v: number) => (total === 0 ? 0 : Math.round((v / total) * 100));
+
+    return [
+      { label: "Leads", value: total, pct: 100, icon: Users, tint: "text-[#c4b5fd]", sub: followUpDue === 0 ? "All caught up" : `${followUpDue} follow-up${followUpDue === 1 ? "" : "s"} due soon` },
+      { label: "Contacted", value: contacted, pct: pct(contacted), icon: Send, tint: "text-[#67E8F9]", sub: `${pct(contacted)}% of pipeline` },
+      { label: "Replies", value: replies, pct: pct(replies), icon: Reply, tint: "text-[#c084fc]", sub: `${pct(replies)}% of pipeline` },
+      { label: "Meetings", value: meetings, pct: pct(meetings), icon: CalendarCheck, tint: "text-[#FCD34D]", sub: `${pct(meetings)}% of pipeline` },
+      { label: "Won", value: won, pct: pct(won), icon: Trophy, tint: "text-[#8B5CF6]", sub: `${pct(won)}% of pipeline` },
+    ];
+  }, [leads, followUpDue]);
+
+  return (
+    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+      {cards.map((card, i) => (
+        <TiltCard key={card.label} className="p-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="label-caps text-[10px] text-muted-foreground">
+              {card.label}
+            </span>
+            <span
+              className={cn(
+                "flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]",
+                card.tint,
+              )}
+            >
+              <card.icon className="size-3.5" />
+            </span>
+          </div>
+          <p className="tabular mt-3 text-2xl font-semibold tracking-tight">
+            {card.value}
+          </p>
+          <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+            <motion.div
+              className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A855F7]"
+              initial={{ width: 0 }}
+              animate={{ width: `${card.pct}%` }}
+              transition={{ ...SPRING_SOFT, delay: 0.1 + i * 0.06 }}
+            />
+          </div>
+          <p className="mt-1.5 truncate text-[11px] text-muted-foreground">
+            {card.sub}
+          </p>
+        </TiltCard>
+      ))}
+    </div>
   );
 }
 
@@ -500,7 +629,7 @@ function LeadRowMenu({
           <MoreHorizontal className="size-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
+      <DropdownMenuContent align="end" className="depth-pop w-48">
         <DropdownMenuItem onClick={onCompose}>
           <Send className="mr-2 size-3.5" /> Compose outreach
         </DropdownMenuItem>
@@ -532,8 +661,8 @@ function LeadRowMenu({
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center">
-      <div className="flex size-11 items-center justify-center rounded-full bg-foreground text-background">
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
+      <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
         <Users className="size-5" />
       </div>
       <h2 className="mt-4 text-lg font-semibold tracking-tight">
@@ -575,7 +704,7 @@ function SampleDataLoader() {
 
 function NoMatch({ onClear }: { onClear: () => void }) {
   return (
-    <div className="rounded-lg border border-dashed border-border bg-card/50 px-6 py-14 text-center">
+    <div className="rounded-xl border border-dashed border-border bg-card/60 px-6 py-14 text-center">
       <p className="text-sm font-medium">No leads match these filters.</p>
       <p className="mt-1 text-sm text-muted-foreground">
         Try a different search term or clear the filters.
@@ -593,7 +722,7 @@ function LeadsSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3"
+          className="flex items-center gap-4 rounded-xl border border-border bg-card px-4 py-3"
         >
           <Skeleton className="size-7 rounded-full" />
           <div className="flex-1 space-y-1.5">

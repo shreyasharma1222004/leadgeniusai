@@ -102,7 +102,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         <Link to="/" className="flex items-center gap-2">
           <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
           <span className="text-sm font-semibold tracking-tight">
-            DealFlow<span className="text-[#A9E813]"> AI</span>
+            DealFlow<span className="text-[#A855F7]"> AI</span>
           </span>
         </Link>
         <div>
@@ -127,7 +127,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           <Link to="/" className="mb-8 flex items-center justify-center gap-2 lg:hidden">
             <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
             <span className="text-sm font-semibold tracking-tight">
-              DealFlow<span className="text-[#A9E813]"> AI</span>
+              DealFlow<span className="text-[#A855F7]"> AI</span>
             </span>
           </Link>
 

@@ -89,14 +89,14 @@ export default function IntegrationsPage() {
       <section
         className={cn(
           "mb-6 rounded-lg border p-5",
-          gmailActive ? "border-[#D4FF4F]/60 bg-[#D4FF4F]/10" : "border-border bg-card",
+          gmailActive ? "border-[#8B5CF6]/50 bg-[#8B5CF6]/[0.07] shadow-[0_0_24px_rgba(139,92,246,0.1)]" : "border-border bg-card",
         )}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <Mail className="size-5 text-[#5c7a00]" />
+          <Mail className="size-5 text-[#c4b5fd]" />
           <h2 className="text-sm font-semibold">Send to anybody — connect your Gmail</h2>
           {gmailActive ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#D4FF4F] px-2 py-0.5 text-[10px] font-medium text-[#191918]">
+            <span className="inline-flex items-center gap-1 rounded-full border border-[#8B5CF6]/50 bg-[#8B5CF6]/15 px-2 py-0.5 text-[10px] font-medium text-[#c4b5fd]">
               <CheckCircle2 className="size-3" /> Connected as {delivery?.from}
             </span>
           ) : (
@@ -121,7 +121,7 @@ export default function IntegrationsPage() {
                   <>
                     Go to{" "}
                     <a
-                      className="font-medium text-[#5c7a00] underline underline-offset-2"
+                      className="font-medium text-[#c4b5fd] underline underline-offset-2"
                       href="https://myaccount.google.com/security"
                       target="_blank"
                       rel="noreferrer"
@@ -138,7 +138,7 @@ export default function IntegrationsPage() {
                   <>
                     Visit{" "}
                     <a
-                      className="font-medium text-[#5c7a00] underline underline-offset-2"
+                      className="font-medium text-[#c4b5fd] underline underline-offset-2"
                       href="https://myaccount.google.com/apppasswords"
                       target="_blank"
                       rel="noreferrer"
@@ -173,7 +173,7 @@ export default function IntegrationsPage() {
               },
             ].map((step, i) => (
               <li key={step.title} className="flex gap-3">
-                <span className="tabular flex size-6 shrink-0 items-center justify-center rounded-full bg-[#D4FF4F] text-[11px] font-semibold text-[#191918]">
+                <span className="tabular flex size-6 shrink-0 items-center justify-center rounded-full border border-[#8B5CF6]/50 bg-[#8B5CF6]/15 text-[11px] font-semibold text-[#c4b5fd]">
                   {i + 1}
                 </span>
                 <div>
@@ -199,9 +199,9 @@ export default function IntegrationsPage() {
       {/* Deliverability playbook */}
       <section className="mb-6 rounded-lg border border-border bg-card p-5">
         <div className="flex flex-wrap items-center gap-2">
-          <ShieldCheck className="size-5 text-[#5c7a00]" />
+          <ShieldCheck className="size-5 text-[#c4b5fd]" />
           <h2 className="text-sm font-semibold">Staying out of spam</h2>
-          <span className="rounded-full bg-[#D4FF4F] px-2 py-0.5 text-[10px] font-medium text-[#191918]">
+          <span className="rounded-full border border-[#8B5CF6]/40 bg-[#8B5CF6]/10 px-2 py-0.5 text-[10px] font-medium text-[#c4b5fd]">
             Read before scaling up
           </span>
         </div>
@@ -214,7 +214,7 @@ export default function IntegrationsPage() {
         <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
           {DELIVERABILITY_TIPS.map((tip) => (
             <li key={tip} className="flex items-start gap-2 text-[13px] leading-relaxed text-muted-foreground">
-              <span aria-hidden className="mt-[7px] size-1 shrink-0 rounded-full bg-[#A9E813]" />
+              <span aria-hidden className="mt-[7px] size-1 shrink-0 rounded-full bg-[#8B5CF6]" />
               {tip}
             </li>
           ))}
@@ -225,14 +225,14 @@ export default function IntegrationsPage() {
         {integrations.map((row) => (
           <div
             key={row.name}
-            className="flex flex-col gap-3 rounded-lg border border-border bg-card p-5 sm:flex-row sm:items-start"
+            className="depth-card-hover flex flex-col gap-3 rounded-xl border border-border bg-card p-5 transition-colors sm:flex-row sm:items-start"
           >
             <span
               className={cn(
                 "flex size-10 shrink-0 items-center justify-center rounded-md",
                 row.status === "live"
-                  ? "bg-[#D4FF4F]/15 text-[#5c7a00]"
-                  : "bg-muted text-muted-foreground",
+                  ? "border border-[#8B5CF6]/40 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_14px_rgba(139,92,246,0.2)]"
+                  : "border border-white/10 bg-white/[0.04] text-muted-foreground",
               )}
             >
               <row.icon className="size-5" />
@@ -244,8 +244,8 @@ export default function IntegrationsPage() {
                   className={cn(
                     "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
                     row.status === "live"
-                      ? "bg-[#D4FF4F] text-[#191918]"
-                      : "bg-secondary text-secondary-foreground",
+                      ? "border border-[#8B5CF6]/50 bg-[#8B5CF6]/15 text-[#c4b5fd]"
+                      : "border border-white/10 bg-white/[0.04] text-muted-foreground",
                   )}
                 >
                   {row.status === "live" ? (

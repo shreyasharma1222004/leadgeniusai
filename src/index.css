@@ -42,74 +42,75 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* CHANGE VALUES FOR THEME — Studio theme: warm off-whites, ink, lime accent */
+/* CHANGE VALUES FOR THEME — Spatial command center: dark environment, ultraviolet accent */
 :root {
-  --radius: 0.5rem;
-  --background: #faf8f3;
-  --foreground: #1d1c1a;
-  --card: #fffffd;
-  --card-foreground: #1d1c1a;
-  --popover: #fffffd;
-  --popover-foreground: #1d1c1a;
-  --primary: #191918;
-  --primary-foreground: #f8f6f1;
-  --secondary: #f2efe7;
-  --secondary-foreground: #2a2926;
-  --muted: #f4f1ea;
-  --muted-foreground: #6f6c63;
-  --accent: #f2efe7;
-  --accent-foreground: #191918;
-  --destructive: #b3401f;
-  --border: #e7e2d5;
-  --input: #e2ddcf;
-  --ring: #191918;
-  --chart-1: #a9e813;
-  --chart-2: #7d6f4e;
-  --chart-3: #b0a88f;
-  --chart-4: #d4ff4f;
-  --chart-5: #5c7a00;
-  --sidebar: #f4f1e9;
-  --sidebar-foreground: #1d1c1a;
-  --sidebar-primary: #191918;
-  --sidebar-primary-foreground: #f8f6f1;
-  --sidebar-accent: #e9e4d7;
-  --sidebar-accent-foreground: #191918;
-  --sidebar-border: #e7e2d5;
-  --sidebar-ring: #191918;
+  --radius: 0.625rem;
+  --background: #08090c;
+  --foreground: #f5f5f2;
+  --card: #131620;
+  --card-foreground: #f5f5f2;
+  --popover: #181b27;
+  --popover-foreground: #f5f5f2;
+  --primary: #8b5cf6;
+  --primary-foreground: #ffffff;
+  --secondary: #1a1d29;
+  --secondary-foreground: #c9cbd4;
+  --muted: #14161f;
+  --muted-foreground: #9296a3;
+  --accent: #1c1f2e;
+  --accent-foreground: #f5f5f2;
+  --destructive: #f87171;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: rgba(139, 92, 246, 0.55);
+  --chart-1: #8b5cf6;
+  --chart-2: #a855f7;
+  --chart-3: #67e8f9;
+  --chart-4: #c4b5fd;
+  --chart-5: #7c3aed;
+  --sidebar: #0b0d13;
+  --sidebar-foreground: #f5f5f2;
+  --sidebar-primary: #8b5cf6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1c1f2e;
+  --sidebar-accent-foreground: #f5f5f2;
+  --sidebar-border: rgba(255, 255, 255, 0.07);
+  --sidebar-ring: rgba(139, 92, 246, 0.55);
 }
 
+/* Single dark environment — the app is always in "dark" mode */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #08090c;
+  --foreground: #f5f5f2;
+  --card: #131620;
+  --card-foreground: #f5f5f2;
+  --popover: #181b27;
+  --popover-foreground: #f5f5f2;
+  --primary: #8b5cf6;
+  --primary-foreground: #ffffff;
+  --secondary: #1a1d29;
+  --secondary-foreground: #c9cbd4;
+  --muted: #14161f;
+  --muted-foreground: #9296a3;
+  --accent: #1c1f2e;
+  --accent-foreground: #f5f5f2;
+  --destructive: #f87171;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: rgba(139, 92, 246, 0.55);
+  --chart-1: #8b5cf6;
+  --chart-2: #a855f7;
+  --chart-3: #67e8f9;
+  --chart-4: #c4b5fd;
+  --chart-5: #7c3aed;
+  --sidebar: #0b0d13;
+  --sidebar-foreground: #f5f5f2;
+  --sidebar-primary: #8b5cf6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1c1f2e;
+  --sidebar-accent-foreground: #f5f5f2;
+  --sidebar-border: rgba(255, 255, 255, 0.07);
+  --sidebar-ring: rgba(139, 92, 246, 0.55);
 }
 
 @layer base {
@@ -126,19 +127,170 @@
     cursor: pointer;
   }
   ::selection {
-    background: #d4ff4f;
-    color: #191918;
+    background: rgba(139, 92, 246, 0.35);
+    color: #f5f5f2;
   }
 }
 
-/* Studio flourishes — grain wash, thin frame, editorial rhythm */
+/* ── Layer 0 · Environment ───────────────────────────────────────────────
+   Near-black physical space: two soft violet/cyan light sources, faint
+   grid, fine noise. Everything above this plane reads as floating. */
 body {
+  background-color: #08090c;
   background-image:
-    radial-gradient(rgba(29, 28, 26, 0.028) 1px, transparent 1px),
-    radial-gradient(1200px 480px at 85% -160px, rgba(169, 232, 19, 0.07), transparent 60%);
-  background-size: 28px 28px, 100% 100%;
+    radial-gradient(900px 420px at 12% -8%, rgba(139, 92, 246, 0.09), transparent 60%),
+    radial-gradient(700px 380px at 88% -12%, rgba(103, 232, 249, 0.045), transparent 60%),
+    radial-gradient(1100px 600px at 50% 118%, rgba(139, 92, 246, 0.06), transparent 62%),
+    radial-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 30px 30px;
+  background-attachment: fixed;
 }
 
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  border: 2px solid #08090c;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.45);
+}
+
+/* ── Spatial depth utilities ──────────────────────────────────────────── */
+
+/* Layer 1 — workspace plane */
+.spatial-plane {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.04) inset,
+    0 24px 70px -32px rgba(0, 0, 0, 0.85);
+}
+
+/* Layer 2 — floating card */
+.depth-card {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+    0 12px 32px -16px rgba(0, 0, 0, 0.75);
+}
+.depth-card-hover {
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+}
+.depth-card-hover:hover {
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.07) inset,
+    0 18px 44px -16px rgba(0, 0, 0, 0.85),
+    0 0 24px -6px rgba(139, 92, 246, 0.28);
+}
+
+/* Layer 3 — floating menus & popovers */
+.depth-pop {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 24px 60px -12px rgba(0, 0, 0, 0.9),
+    0 0 32px -10px rgba(139, 92, 246, 0.22);
+}
+
+/* Layer 5 — immersive panels */
+.depth-immersive {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 40px 110px -20px rgba(0, 0, 0, 0.95),
+    0 0 60px -18px rgba(139, 92, 246, 0.3);
+}
+
+/* Selected sidebar pill — floating illuminated card */
+.nav-pill-active {
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.16), rgba(139, 92, 246, 0.07));
+  border: 1px solid rgba(139, 92, 246, 0.38);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.07) inset,
+    0 8px 20px -8px rgba(139, 92, 246, 0.45),
+    0 0 18px -4px rgba(139, 92, 246, 0.35);
+}
+
+/* Purple glow for primary AI/CTA buttons */
+.glow-primary {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.18) inset,
+    0 8px 24px -8px rgba(139, 92, 246, 0.65);
+}
+.glow-primary:hover {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.22) inset,
+    0 10px 32px -8px rgba(139, 92, 246, 0.85);
+}
+
+/* AI indicator badge */
+.ai-chip {
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+/* Understated animated gradient border for AI insight cards */
+.ai-gradient-border {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(120deg, rgba(139, 92, 246, 0.5), rgba(103, 232, 249, 0.25), rgba(139, 92, 246, 0.5)) border-box;
+  background-size: 100% 100%, 300% 300%;
+  animation: ai-border-drift 7s ease-in-out infinite;
+}
+@keyframes ai-border-drift {
+  0%, 100% { background-position: 0% 0%, 0% 50%; }
+  50% { background-position: 0% 0%, 100% 50%; }
+}
+
+/* Ambient breathing glow (AI symbols, active dots) */
+.ai-pulse {
+  animation: ai-pulse 2.6s ease-in-out infinite;
+}
+@keyframes ai-pulse {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 3px rgba(139, 92, 246, 0.6)); }
+  50% { opacity: 0.72; filter: drop-shadow(0 0 9px rgba(139, 92, 246, 0.9)); }
+}
+
+/* Soft ambient float for decorative background geometry */
+.ambient-float {
+  animation: ambient-float 14s ease-in-out infinite;
+}
+@keyframes ambient-float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(0, -14px, 0) rotate(2.2deg); }
+}
+
+/* AI generation stage progression */
+.stage-enter {
+  animation: stage-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes stage-enter {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Reduced motion — keep everything usable, drop ambient movement */
+@media (prefers-reduced-motion: reduce) {
+  .ai-gradient-border,
+  .ai-pulse,
+  .ambient-float,
+  .stage-enter {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Kept from the previous theme — used across existing pages */
 .frame-line {
   background-image: linear-gradient(to right, transparent, var(--border) 18%, var(--border) 82%, transparent);
 }

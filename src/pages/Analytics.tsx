@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { TiltCard } from "@/components/spatial";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import { computeAnalytics } from "@/lib/analytics";
@@ -24,7 +25,7 @@ export default function AnalyticsPage() {
       <AppShell title="Analytics">
         <div className="grid gap-3 md:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-lg bg-muted/60" />
+            <div key={i} className="h-24 animate-pulse rounded-xl bg-card" />
           ))}
         </div>
       </AppShell>
@@ -65,8 +66,8 @@ export default function AnalyticsPage() {
       </p>
 
       {a.total === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center">
-          <div className="flex size-11 items-center justify-center rounded-full bg-foreground text-background">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
             <BarChart3 className="size-5" />
           </div>
           <h2 className="mt-4 text-lg font-semibold tracking-tight">No data to analyze yet.</h2>
@@ -76,14 +77,14 @@ export default function AnalyticsPage() {
         </div>
       ) : (
         <>
-          {/* Metric cards */}
+          {/* Metric cards — floating */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {metrics.map((m) => (
-              <div key={m.label} className="rounded-lg border border-border bg-card p-4">
+              <TiltCard key={m.label} className="p-4">
                 <p className="label-caps text-muted-foreground/70">{m.label}</p>
                 <p className="tabular mt-2 text-3xl font-semibold tracking-tight">{m.value}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{m.hint}</p>
-              </div>
+              </TiltCard>
             ))}
           </div>
 
@@ -95,13 +96,13 @@ export default function AnalyticsPage() {
                 {a.funnel.map((stage) => (
                   <div key={stage.key} className="flex items-center gap-3">
                     <span className="w-20 shrink-0 text-xs text-muted-foreground">{stage.label}</span>
-                    <div className="h-6 flex-1 overflow-hidden rounded-md bg-muted">
+                    <div className="h-6 flex-1 overflow-hidden rounded-md bg-white/[0.05]">
                       <div
                         className={cn(
                           "flex h-full items-center justify-end rounded-md px-2 transition-all",
                           stage.key === "won"
-                            ? "bg-[#A9E813] text-[#191918]"
-                            : "bg-foreground/70 text-background",
+                            ? "bg-gradient-to-r from-[#8B5CF6] to-[#A855F7] text-white shadow-[0_0_16px_rgba(139,92,246,0.35)]"
+                            : "bg-[#8B5CF6]/40 text-white",
                         )}
                         style={{ width: `${Math.max(8, (stage.count / maxFunnel) * 100)}%` }}
                       >
@@ -156,7 +157,7 @@ export default function AnalyticsPage() {
                   <Link
                     key={ind.name}
                     to="/leads"
-                    className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+                    className="rounded-full border border-border bg-white/[0.02] px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-[#8B5CF6]/50 hover:text-[#c4b5fd]"
                   >
                     {ind.name} · {ind.count}
                   </Link>

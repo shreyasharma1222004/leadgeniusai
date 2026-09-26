@@ -67,7 +67,7 @@ export default function CampaignsPage() {
       <AppShell title="Campaigns">
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-44 animate-pulse rounded-lg bg-muted/60" />
+            <div key={i} className="h-44 animate-pulse rounded-xl bg-card" />
           ))}
         </div>
       </AppShell>
@@ -173,8 +173,8 @@ export default function CampaignsPage() {
       </p>
 
       {campaigns.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center">
-          <div className="flex size-11 items-center justify-center rounded-full bg-foreground text-background">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
             <Target className="size-5" />
           </div>
           <h2 className="mt-4 text-lg font-semibold tracking-tight">No campaigns yet.</h2>
@@ -195,7 +195,10 @@ export default function CampaignsPage() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {campaigns.map((campaign) => (
-            <div key={campaign._id} className="flex flex-col rounded-lg border border-border bg-card p-4">
+            <div
+              key={campaign._id}
+              className="depth-card depth-card-hover flex flex-col rounded-xl border border-border bg-card p-4"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{campaign.name}</p>
@@ -208,10 +211,10 @@ export default function CampaignsPage() {
                   className={
                     "rounded-full px-2 py-0.5 text-[10px] font-medium " +
                     (campaign.status === "active"
-                      ? "bg-[#D4FF4F] text-[#191918]"
+                      ? "border border-[#8B5CF6]/50 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_10px_rgba(139,92,246,0.2)]"
                       : campaign.status === "completed"
-                        ? "bg-secondary text-secondary-foreground"
-                        : "bg-muted text-muted-foreground")
+                        ? "border border-white/10 bg-white/[0.04] text-muted-foreground"
+                        : "border border-white/[0.06] bg-white/[0.02] text-muted-foreground/70")
                   }
                 >
                   {campaign.status}
@@ -298,9 +301,9 @@ export default function CampaignsPage() {
                       aria-pressed={form.channel === c}
                       onClick={() => setForm((f) => ({ ...f, channel: c }))}
                       className={
-                        "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors " +
+                        "cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-colors " +
                         (form.channel === c
-                          ? "border-foreground bg-foreground text-background"
+                          ? "border-[#8B5CF6]/60 bg-[#8B5CF6]/15 text-[#c4b5fd]"
                           : "border-border text-muted-foreground hover:text-foreground")
                       }
                     >
@@ -365,7 +368,7 @@ export default function CampaignsPage() {
                   leads.map((lead: Lead) => (
                     <label
                       key={lead._id}
-                      className="flex cursor-pointer items-center gap-3 border-b border-border/60 px-3 py-2 last:border-b-0 hover:bg-muted/40"
+                      className="flex cursor-pointer items-center gap-3 border-b border-border/60 px-3 py-2 last:border-b-0 transition-colors hover:bg-white/[0.04]"
                     >
                       <Checkbox
                         checked={selectedLeads.has(lead._id)}
@@ -422,7 +425,7 @@ export default function CampaignsPage() {
                   className={
                     "size-2 shrink-0 rounded-full " +
                     (row.status === "sent"
-                      ? "bg-[#A9E813]"
+                      ? "bg-[#8B5CF6] shadow-[0_0_8px_rgba(139,92,246,0.5)]"
                       : row.status === "failed"
                         ? "bg-destructive"
                         : "bg-border")

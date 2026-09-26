@@ -363,7 +363,7 @@ export function AddLeadDialog({
                   )}
                 >
                   {i < stage || (i === stage && !busy) ? (
-                    <span className="size-1.5 rounded-full bg-[#A9E813]" />
+                    <span className="size-1.5 rounded-full bg-[#8B5CF6]" />
                   ) : i === stage ? (
                     <Loader2 className="size-3 animate-spin text-muted-foreground" />
                   ) : (

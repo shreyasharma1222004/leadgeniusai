@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/AppShell";
 import { OutreachComposer } from "@/components/OutreachComposer";
+import { LeadScoreRing, SpatialPage } from "@/components/spatial";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,7 @@ import {
 } from "@/lib/leadStatus";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
+import { motion } from "framer-motion";
 import {
   ArrowLeft,
   CalendarPlus,
@@ -221,7 +223,7 @@ export default function LeadDetailPage() {
         </>
       }
     >
-      <div className="grid gap-4 lg:grid-cols-3">
+      <SpatialPage className="grid gap-4 lg:grid-cols-3">
         {/* Left column: identity + contact + status */}
         <div className="flex flex-col gap-4">
           <section className="rounded-lg border border-border bg-card p-5">
@@ -370,34 +372,23 @@ export default function LeadDetailPage() {
 
             {lead.summary ? (
               <div className="mt-4">
-                <div className="flex items-baseline gap-3">
-                  <span className="tabular text-4xl font-semibold tracking-tight">
-                    {lead.score ?? "—"}
-                  </span>
+                <div className="flex items-center gap-4">
+                  {lead.score !== undefined ? (
+                    <LeadScoreRing
+                      score={lead.score}
+                      size={88}
+                      label="Estimated lead score"
+                      breakdown={lead.scoreBreakdown}
+                    />
+                  ) : (
+                    <span className="tabular text-4xl font-semibold tracking-tight">
+                      {lead.score ?? "—"}
+                    </span>
+                  )}
                   <span className="text-xs text-muted-foreground">
                     / 100 estimated lead score
                   </span>
                 </div>
-                {lead.scoreBreakdown && lead.scoreBreakdown.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {lead.scoreBreakdown.map((d) => (
-                      <div key={d.label} className="flex items-center gap-3">
-                        <span className="w-36 shrink-0 text-xs text-muted-foreground">
-                          {d.label}
-                        </span>
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-foreground/70"
-                            style={{ width: `${d.value}%` }}
-                          />
-                        </div>
-                        <span className="tabular w-8 text-right text-xs text-muted-foreground">
-                          {d.value}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
                 <p className="mt-4 text-sm leading-relaxed">{lead.summary}</p>
 
                 {lead.painPoints && lead.painPoints.length > 0 && (
@@ -436,8 +427,8 @@ export default function LeadDetailPage() {
                 )}
 
                 {lead.approach && (
-                  <div className="mt-5 rounded-md border border-[#D4FF4F]/50 bg-[#D4FF4F]/10 px-3 py-2.5">
-                    <p className="label-caps text-muted-foreground/80">
+                  <div className="mt-5 rounded-md border border-[#8B5CF6]/35 bg-[#8B5CF6]/[0.08] px-3 py-2.5">
+                    <p className="label-caps text-[#c4b5fd]">
                       Suggested angle
                     </p>
                     <p className="mt-1 text-sm">{lead.approach}</p>
@@ -506,14 +497,14 @@ export default function LeadDetailPage() {
                         className={cn(
                           "relative mt-1 flex size-[15px] shrink-0 items-center justify-center rounded-full border",
                           f.status === "done"
-                            ? "border-[#A9E813] bg-[#D4FF4F]"
+                            ? "border-[#8B5CF6] bg-[#8B5CF6]"
                             : overdue
                               ? "border-destructive/60 bg-destructive/10"
                               : "border-border bg-background",
                         )}
                       >
                         {f.status === "done" && (
-                          <Check className="size-2.5 text-[#191918]" />
+                          <Check className="size-2.5 text-white" />
                         )}
                       </span>
                       <div className="min-w-0 flex-1">
@@ -590,7 +581,7 @@ export default function LeadDetailPage() {
             )}
           </section>
         </div>
-      </div>
+      </SpatialPage>
 
       {/* Shared outreach composer */}
       {lead && (
@@ -688,7 +679,7 @@ function MessageThread({
                 className={cn(
                   "max-w-[85%] rounded-lg border px-3.5 py-2.5",
                   outbound
-                    ? "ml-auto border-[#D4FF4F]/50 bg-[#D4FF4F]/10"
+                    ? "ml-auto border-[#8B5CF6]/40 bg-[#8B5CF6]/[0.10]"
                     : "border-border bg-muted/40",
                 )}
               >

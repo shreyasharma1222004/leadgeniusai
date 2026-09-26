@@ -1,5 +1,6 @@
 import { AddLeadDialog } from "@/components/AddLeadDialog";
 import { AppShell } from "@/components/AppShell";
+import { AIButton } from "@/components/spatial";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
@@ -56,10 +57,9 @@ export default function ResearchPage() {
       ) : (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <Button onClick={generate} disabled={!leads}>
-              <Sparkles className="size-4" />
+            <AIButton onClick={generate} disabled={!leads} className="h-9">
               {suggestions ? "Regenerate suggestions" : "Find prospects"}
-            </Button>
+            </AIButton>
             {suggestions && (
               <div className="flex items-center rounded-md border border-border p-0.5">
                 <button
@@ -67,9 +67,9 @@ export default function ResearchPage() {
                   aria-pressed={industryFilter === ""}
                   onClick={() => setIndustryFilter("")}
                   className={
-                    "rounded px-2.5 py-1.5 text-xs font-medium transition-colors " +
+                    "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors " +
                     (industryFilter === ""
-                      ? "bg-foreground text-background"
+                      ? "bg-[#8B5CF6]/20 text-[#c4b5fd] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)]"
                       : "text-muted-foreground hover:text-foreground")
                   }
                 >
@@ -82,9 +82,9 @@ export default function ResearchPage() {
                     aria-pressed={industryFilter === ind}
                     onClick={() => setIndustryFilter(ind)}
                     className={
-                      "rounded px-2.5 py-1.5 text-xs font-medium transition-colors " +
+                      "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors " +
                       (industryFilter === ind
-                        ? "bg-foreground text-background"
+                        ? "bg-[#8B5CF6]/20 text-[#c4b5fd] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)]"
                         : "text-muted-foreground hover:text-foreground")
                     }
                   >
@@ -96,8 +96,8 @@ export default function ResearchPage() {
           </div>
 
           {!suggestions ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center">
-              <div className="flex size-11 items-center justify-center rounded-full bg-foreground text-background">
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
+              <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
                 <Search className="size-5" />
               </div>
               <h2 className="mt-4 text-lg font-semibold tracking-tight">
@@ -119,7 +119,10 @@ export default function ResearchPage() {
           ) : (
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {filtered.map((s, i) => (
-                <div key={`${s.name}-${i}`} className="flex flex-col rounded-lg border border-border bg-card p-4">
+                <div
+                  key={`${s.name}-${i}`}
+                  className="depth-card depth-card-hover flex flex-col rounded-xl border border-border bg-card p-4"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{s.name}</p>
@@ -127,7 +130,7 @@ export default function ResearchPage() {
                         {s.jobTitle} · {s.company}
                       </p>
                     </div>
-                    <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                    <span className="rounded-full border border-[#67E8F9]/25 bg-[#67E8F9]/[0.06] px-2 py-0.5 text-[10px] font-medium text-[#a5f3fc]">
                       {s.industry}
                     </span>
                   </div>
@@ -147,7 +150,7 @@ export default function ResearchPage() {
                       href={`https://www.google.com/search?q=${encodeURIComponent(`${s.company} ${s.location}`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex h-8 items-center gap-1 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+                      className="flex h-8 items-center gap-1 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:border-[#8B5CF6]/50 hover:text-[#c4b5fd]"
                     >
                       <ExternalLink className="size-3" /> Verify
                     </a>

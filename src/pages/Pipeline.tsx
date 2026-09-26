@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { SPRING, SPRING_SOFT } from "@/components/spatial";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -6,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { LEAD_STATUSES, LEAD_STATUS_LABELS, statusClasses } from "@/lib/leadStatus";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
+import { motion } from "framer-motion";
 import { Users } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -25,7 +27,7 @@ export default function PipelinePage() {
       <AppShell title="Pipeline">
         <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-7">
           {LEAD_STATUSES.map((s) => (
-            <Skeleton key={s} className="h-64 rounded-lg" />
+            <Skeleton key={s} className="h-64 rounded-xl" />
           ))}
         </div>
       </AppShell>
@@ -35,8 +37,8 @@ export default function PipelinePage() {
   if (leads.length === 0) {
     return (
       <AppShell title="Pipeline">
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center">
-          <div className="flex size-11 items-center justify-center rounded-full bg-foreground text-background">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
             <Users className="size-5" />
           </div>
           <h2 className="mt-4 text-lg font-semibold tracking-tight">No leads on the board.</h2>
@@ -72,6 +74,7 @@ export default function PipelinePage() {
         {LEAD_STATUSES.map((status) => {
           const columnLeads = leads.filter((l) => l.status === status);
           const isOver = overColumn === status;
+          const isDragging = dragId !== null;
           return (
             <div
               key={status}
@@ -82,11 +85,15 @@ export default function PipelinePage() {
               onDragLeave={() => setOverColumn((c) => (c === status ? null : c))}
               onDrop={() => void handleDrop(status)}
               className={cn(
-                "flex w-64 shrink-0 flex-col rounded-lg border bg-sidebar/60 transition-colors",
-                isOver ? "border-[#A9E813]/70 bg-[#D4FF4F]/5" : "border-border",
+                "flex w-64 shrink-0 flex-col rounded-xl border transition-all duration-200",
+                isOver
+                  ? "border-[#8B5CF6]/70 bg-[#8B5CF6]/[0.07] shadow-[0_0_32px_rgba(139,92,246,0.18)]"
+                  : isDragging
+                    ? "border-border bg-sidebar/40"
+                    : "border-border bg-sidebar/60",
               )}
             >
-              <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
+              <div className="flex items-center justify-between border-b border-border/70 px-3 py-2.5">
                 <span
                   className={cn(
                     "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
@@ -95,7 +102,14 @@ export default function PipelinePage() {
                 >
                   {LEAD_STATUS_LABELS[status]}
                 </span>
-                <span className="tabular text-xs text-muted-foreground">{columnLeads.length}</span>
+                <span
+                  className={cn(
+                    "tabular text-xs",
+                    isOver ? "text-[#c4b5fd]" : "text-muted-foreground",
+                  )}
+                >
+                  {columnLeads.length}
+                </span>
               </div>
               <div className="flex min-h-[120px] flex-1 flex-col gap-2 p-2">
                 {columnLeads.length === 0 && (
@@ -104,17 +118,31 @@ export default function PipelinePage() {
                   </p>
                 )}
                 {columnLeads.map((lead: Lead) => (
-                  <div
+                  <motion.div
                     key={lead._id}
+                    layoutId={lead._id}
+                    layout
+                    transition={SPRING_SOFT}
                     draggable
                     onDragStart={() => setDragId(lead._id)}
                     onDragEnd={() => setDragId(null)}
+                    animate={
+                      dragId === lead._id
+                        ? { scale: 1.03, y: -6, opacity: 0.85 }
+                        : { scale: 1, y: 0, opacity: 1 }
+                    }
+                    whileHover={dragId === null ? { y: -3 } : undefined}
+                    style={
+                      dragId === lead._id
+                        ? { boxShadow: "0 18px 40px rgba(0,0,0,0.5), 0 0 20px rgba(139,92,246,0.15)", zIndex: 20 }
+                        : undefined
+                    }
                     className={cn(
-                      "cursor-grab rounded-md border border-border bg-card p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing",
-                      dragId === lead._id && "opacity-50",
+                      "relative cursor-grab rounded-lg border border-border bg-card p-3 shadow-sm transition-colors hover:border-white/15 active:cursor-grabbing",
+                      dragId === lead._id && "border-[#8B5CF6]/50",
                     )}
                   >
-                    <Link to={`/leads/${lead._id}`} className="block">
+                    <Link to={`/leads/${lead._id}`} className="block" draggable={false}>
                       <p className="truncate text-sm font-medium">{lead.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {lead.company ?? "—"}
@@ -124,13 +152,23 @@ export default function PipelinePage() {
                           {lead.score !== undefined ? `Score ${lead.score}` : "Unscored"}
                         </span>
                         {lead.nextFollowUpAt && (
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          <span className="rounded border border-[#8B5CF6]/25 bg-[#8B5CF6]/[0.08] px-1.5 py-0.5 text-[10px] text-[#c4b5fd]">
                             follow-up set
                           </span>
                         )}
                       </div>
+                      {lead.score !== undefined && (
+                        <span className="mt-2 block h-0.5 overflow-hidden rounded-full bg-white/[0.07]">
+                          <motion.span
+                            className="block h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A855F7]"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${lead.score}%` }}
+                            transition={{ ...SPRING, delay: 0.1 }}
+                          />
+                        </span>
+                      )}
                     </Link>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>

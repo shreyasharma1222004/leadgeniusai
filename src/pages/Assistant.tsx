@@ -70,7 +70,7 @@ export default function AssistantPage() {
       {!ready ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse rounded-lg bg-muted/60" />
+            <div key={i} className="h-16 animate-pulse rounded-lg bg-card" />
           ))}
         </div>
       ) : (
@@ -79,7 +79,7 @@ export default function AssistantPage() {
             {turns.length === 0 && (
               <div className="rounded-lg border border-border bg-card p-5">
                 <div className="flex items-center gap-2">
-                  <span className="flex size-8 items-center justify-center rounded-full bg-foreground text-background">
+                  <span className="flex size-8 items-center justify-center rounded-full border border-[#8B5CF6]/40 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_14px_rgba(139,92,246,0.25)]">
                     <Bot className="size-4" />
                   </span>
                   <p className="text-sm font-semibold">Your pipeline, on demand.</p>
@@ -97,12 +97,12 @@ export default function AssistantPage() {
                   className={cn(
                     "max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed sm:max-w-[75%]",
                     turn.role === "user"
-                      ? "bg-foreground text-background"
-                      : "border border-border bg-card",
+                      ? "border border-[#8B5CF6]/40 bg-[#8B5CF6]/[0.14] text-[#ede9fe]"
+                      : "ai-gradient-border rounded-lg",
                   )}
                 >
                   {turn.role === "assistant" && (
-                    <p className="label-caps mb-1.5 flex items-center gap-1.5 text-muted-foreground/70">
+                    <p className="label-caps mb-1.5 flex items-center gap-1.5 text-[#c4b5fd]">
                       <Sparkles className="size-3" /> DealFlow AI
                     </p>
                   )}
@@ -111,7 +111,7 @@ export default function AssistantPage() {
                     <ul className="mt-2 space-y-1">
                       {turn.bullets.map((b, bi) => (
                         <li key={bi} className="flex gap-2 text-[13px]">
-                          <span className="mt-1.5 size-1 shrink-0 rounded-full bg-foreground/40" />
+                          <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8B5CF6]/60" />
                           {b}
                         </li>
                       ))}
@@ -126,7 +126,7 @@ export default function AssistantPage() {
                           <Link
                             key={id}
                             to={`/leads/${id}`}
-                            className="rounded-full border border-border px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+                            className="rounded-full border border-border bg-white/[0.02] px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-[#8B5CF6]/50 hover:text-[#c4b5fd]"
                           >
                             {lead.name} →
                           </Link>
@@ -155,7 +155,7 @@ export default function AssistantPage() {
                   key={s}
                   type="button"
                   onClick={() => ask(s)}
-                  className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+                  className="cursor-pointer rounded-full border border-border bg-white/[0.02] px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[#8B5CF6]/50 hover:text-[#c4b5fd]"
                 >
                   {s}
                 </button>
