@@ -8,8 +8,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -18,19 +16,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/convex/_generated/api";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
-  buildLeadsFromMapping,
+  analyzeImportRows,
+  buildExistingKeys,
+  buildRowCandidates,
   LEAD_FIELD_OPTIONS,
   parseCsv,
   suggestField,
   type LeadField,
 } from "@/lib/csv";
-import { AlertTriangle, FileSpreadsheet, Loader2, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type Mapping = (LeadField | "skip")[];
+
+/** Above this many new rows, the import asks for a second explicit confirm. */
+const LARGE_IMPORT_THRESHOLD = 50;
 
 export function ImportCsvDialog({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
@@ -41,9 +44,13 @@ export function ImportCsvDialog({ className }: { className?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [confirmStep, setConfirmStep] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const bulkImport = useMutation(api.leads.bulkImport);
+  // Existing CRM leads — needed for against-CRM duplicate detection in the
+  // preview. Only subscribed while a file is loaded.
+  const leads = useQuery(api.leads.list, open && fileName ? {} : "skip");
 
   const reset = () => {
     setFileName(null);
@@ -53,6 +60,7 @@ export function ImportCsvDialog({ className }: { className?: string }) {
     setError(null);
     setImporting(false);
     setProgress(0);
+    setConfirmStep(false);
   };
 
   const handleFile = async (file: File) => {
@@ -75,53 +83,64 @@ export function ImportCsvDialog({ className }: { className?: string }) {
       setHeaders(headerRow);
       setRows(dataRows);
       setMapping(headerRow.map((h) => suggestField(h)));
+      setConfirmStep(false);
     } catch {
       setError("That file couldn't be read as text. Export it as CSV and retry.");
     }
   };
 
+  // Live analysis: validation + in-file and against-CRM dedup, recomputed
+  // whenever the mapping or your CRM changes.
+  const analysis = useMemo(() => {
+    if (!fileName || leads === undefined) return null;
+    const candidates = buildRowCandidates(rows, mapping);
+    const existing = buildExistingKeys(leads);
+    return analyzeImportRows(candidates, existing);
+  }, [fileName, leads, rows, mapping]);
+
   const startImport = async () => {
-    const nameCols = mapping.filter((m) => m === "name").length;
-    if (nameCols === 0) {
-      setError("Map at least one column to “Full name” — leads need a name.");
-      return;
-    }
+    if (!analysis) return;
     setImporting(true);
     setError(null);
-    const { leads, skipped } = buildLeadsFromMapping(rows, mapping);
-    if (leads.length === 0) {
-      setError("None of the rows had a name in the mapped column — nothing to import.");
+    const { newLeads } = analysis;
+    if (newLeads.length === 0) {
+      setError("Nothing to import — every row is a duplicate or invalid.");
       setImporting(false);
       return;
     }
     // Import in batches so progress feels real for big lists
     const batchSize = 50;
-    const batches: (typeof leads)[] = [];
-    for (let i = 0; i < leads.length; i += batchSize) {
-      batches.push(leads.slice(i, i + batchSize));
+    const batches: (typeof newLeads)[] = [];
+    for (let i = 0; i < newLeads.length; i += batchSize) {
+      batches.push(newLeads.slice(i, i + batchSize));
     }
     try {
       let done = 0;
+      let serverDuplicates = 0;
       for (const batch of batches) {
-        await bulkImport({
+        const result = await bulkImport({
           leads: batch.map((l) => ({ ...l, source: "CSV import" })),
         });
+        serverDuplicates += result.duplicates;
         done += batch.length;
-        setProgress(Math.round((done / leads.length) * 100));
+        setProgress(Math.round((done / newLeads.length) * 100));
       }
-      toast(`Imported ${leads.length} lead${leads.length === 1 ? "" : "s"}`, {
+      const skipped = analysis.duplicateCount + analysis.invalidCount;
+      toast(`Imported ${newLeads.length} lead${newLeads.length === 1 ? "" : "s"}`, {
         description:
-          skipped > 0
-            ? `${skipped} row${skipped === 1 ? " was" : "s were"} skipped (no name in the mapped column).`
+          skipped > 0 || serverDuplicates > 0
+            ? `${skipped + serverDuplicates} row${skipped + serverDuplicates === 1 ? " was" : "s were"} skipped as duplicates or invalid. Nothing was overwritten.`
             : "All rows imported successfully.",
       });
       reset();
       setOpen(false);
     } catch {
-      setError("Import failed partway — check your connection and retry.");
+      setError("Import failed partway — your CRM keeps every lead already saved. Retry re-imports safely: duplicates are skipped automatically.");
       setImporting(false);
     }
   };
+
+  const nameCols = mapping.filter((m) => m === "name").length;
 
   return (
     <Dialog
@@ -141,8 +160,8 @@ export function ImportCsvDialog({ className }: { className?: string }) {
         <DialogHeader>
           <DialogTitle>Import leads from CSV</DialogTitle>
           <DialogDescription>
-            Upload a file, check the column mapping, then confirm. Nothing is
-            imported until you approve.
+            Upload a file, check the column mapping, then review the dedup
+            preview. Nothing is imported until you confirm.
           </DialogDescription>
         </DialogHeader>
 
@@ -241,16 +260,47 @@ export function ImportCsvDialog({ className }: { className?: string }) {
               </div>
             </div>
 
+            {/* Import preview — counts + reasons before anything is written */}
             <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5">
-              <p className="label-caps text-muted-foreground">Preview</p>
-              <p className="mt-1 text-sm">
-                First row becomes{" "}
-                <span className="font-medium">
-                  {mapping.includes("name")
-                    ? `${rows[0]?.[mapping.indexOf("name")] ?? "?"}`
-                    : "— map a name column"}
-                </span>
-              </p>
+              <p className="label-caps text-muted-foreground">Import preview</p>
+              {nameCols === 0 ? (
+                <p className="mt-1 text-sm text-destructive">
+                  Map at least one column to “Full name” — leads need a name.
+                </p>
+              ) : leads === undefined ? (
+                <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" /> Checking against your CRM…
+                </p>
+              ) : analysis ? (
+                <>
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    <Count label="Total rows" value={analysis.totalRows} />
+                    <Count label="New" value={analysis.newCount} tone="good" />
+                    <Count label="Duplicates" value={analysis.duplicateCount} tone="warn" />
+                    <Count label="Invalid" value={analysis.invalidCount} tone="bad" />
+                    <Count label="To be skipped" value={analysis.skippedCount} />
+                  </div>
+                  {(analysis.duplicateReasons.length > 0 || analysis.invalidReasons.length > 0) && (
+                    <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      {analysis.duplicateReasons.map((r) => (
+                        <li key={r}>• {r}</li>
+                      ))}
+                      {analysis.invalidReasons.map((r) => (
+                        <li key={r}>• {r}</li>
+                      ))}
+                      {(analysis.duplicateCount > analysis.duplicateReasons.length ||
+                        analysis.invalidCount > analysis.invalidReasons.length) && (
+                        <li>• …and more</li>
+                      )}
+                    </ul>
+                  )}
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Duplicates match email, phone, or company + name — against this file
+                    <span className="font-medium"> and your existing CRM</span>. First occurrence
+                    wins; duplicates are skipped, never overwritten or deleted.
+                  </p>
+                </>
+              ) : null}
             </div>
           </div>
         )}
@@ -277,19 +327,67 @@ export function ImportCsvDialog({ className }: { className?: string }) {
         )}
 
         <DialogFooter>
-          {fileName && !importing && (
-            <Button onClick={startImport}>
-              {importing ? (
+          {fileName && !importing && analysis && nameCols > 0 && (
+            <>
+              {confirmStep ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" /> Importing…
+                  <Button variant="outline" onClick={() => setConfirmStep(false)}>
+                    Back
+                  </Button>
+                  <Button onClick={() => void startImport()} disabled={analysis.newCount === 0}>
+                    <CheckCircle2 className="size-4" />
+                    Confirm import — {analysis.newCount} new lead
+                    {analysis.newCount === 1 ? "" : "s"}
+                  </Button>
                 </>
               ) : (
-                <>Import {rows.length} rows</>
+                <Button
+                  onClick={() =>
+                    analysis.newCount > LARGE_IMPORT_THRESHOLD
+                      ? setConfirmStep(true)
+                      : void startImport()
+                  }
+                  disabled={analysis.newCount === 0}
+                >
+                  {analysis.newCount > LARGE_IMPORT_THRESHOLD
+                    ? `Review ${analysis.newCount} new leads…`
+                    : `Import ${analysis.newCount} new lead${analysis.newCount === 1 ? "" : "s"}`}
+                </Button>
               )}
-            </Button>
+            </>
           )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function Count({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "good" | "warn" | "bad";
+}) {
+  return (
+    <div className="rounded-md border border-border bg-card px-2 py-1.5 text-center">
+      <p
+        className={
+          "tabular text-lg font-semibold leading-none " +
+          (tone === "good"
+            ? "text-[#42503c]"
+            : tone === "warn"
+              ? "text-[#82552e]"
+              : tone === "bad"
+                ? "text-destructive"
+                : "text-foreground")
+        }
+      >
+        {value}
+      </p>
+      <p className="mt-1 text-[10px] text-muted-foreground">{label}</p>
+    </div>
   );
 }

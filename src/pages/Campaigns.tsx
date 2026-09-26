@@ -19,6 +19,7 @@ import { timeAgo } from "@/lib/format";
 import { useAuth } from "@/hooks/use-auth";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
+  AlertTriangle,
   Loader2,
   Mail,
   Plus,
@@ -29,6 +30,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { DEFAULT_SEND_LIMITS } from "@/lib/sendLimits";
 
 type Campaign = Doc<"campaigns">;
 type Lead = Doc<"leads">;
@@ -61,6 +63,7 @@ export default function CampaignsPage() {
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Campaign | null>(null);
+  const [confirmSend, setConfirmSend] = useState<Campaign | null>(null);
 
   if (campaigns === undefined || leads === undefined) {
     return (
@@ -116,16 +119,26 @@ export default function CampaignsPage() {
     }
   };
 
-  const handleSend = async (campaignId: string) => {
+  // Confirmation-first sending (production hardening §4): the button opens a
+  // dialog with recipient counts and limits; the actual send only starts after
+  // an explicit confirm. Large sends show an extra warning.
+  const handleSend = async (campaign: Campaign) => {
+    setConfirmSend(null);
     setSending(true);
     try {
-      const result = await sendAll({ id: campaignId as never });
+      const result = await sendAll({ id: campaign._id });
       if (result.sent > 0) {
         toast(`Sent ${result.sent} email${result.sent === 1 ? "" : "s"}`, {
-          description: result.failed > 0 ? `${result.failed} failed — see statuses below.` : undefined,
+          description: [
+            result.failed > 0 ? `${result.failed} failed — see statuses below.` : undefined,
+            result.skipped > 0 ? `${result.skipped} still pending.` : undefined,
+          ]
+            .filter(Boolean)
+            .join(" "),
+          duration: 8000,
         });
       } else {
-        toast(result.reason ?? "Nothing to send");
+        toast(result.reason ?? "Nothing to send", { duration: 8000 });
       }
       if (result.failures?.length) {
         toast.error(result.failures[0], { duration: 8000 });
@@ -234,7 +247,7 @@ export default function CampaignsPage() {
                   size="sm"
                   className="h-7 gap-1 text-xs"
                   disabled={sending}
-                  onClick={() => void handleSend(campaign._id)}
+                  onClick={() => setConfirmSend(campaign)}
                 >
                   {sending ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
                   Send pending
@@ -469,7 +482,7 @@ export default function CampaignsPage() {
               <Button
                 className="flex-1"
                 disabled={sending}
-                onClick={() => void handleSend(detail.campaign._id)}
+                onClick={() => setConfirmSend(detail.campaign)}
               >
                 {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                 Send via email
@@ -507,6 +520,134 @@ export default function CampaignsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Send confirm — no email leaves without an explicit confirmation */}
+      <SendConfirmDialog
+        campaign={confirmSend}
+        sending={sending}
+        onClose={() => setConfirmSend(null)}
+        onConfirm={handleSend}
+      />
     </AppShell>
+  );
+}
+
+/**
+ * Confirmation dialog before any campaign send (production hardening §4).
+ * Shows live recipient counts, the resolved limits, and a strong warning for
+ * large sends. The send only starts after an explicit confirm click.
+ */
+function SendConfirmDialog({
+  campaign,
+  sending,
+  onClose,
+  onConfirm,
+}: {
+  campaign: Campaign | null;
+  sending: boolean;
+  onClose: () => void;
+  onConfirm: (campaign: Campaign) => Promise<void> | void;
+}) {
+  const preview = useQuery(
+    api.campaigns.sendPreview,
+    campaign ? { id: campaign._id } : "skip",
+  );
+
+  const pending = preview?.pending ?? 0;
+  const confirmThreshold =
+    preview?.limits.confirmThreshold ?? DEFAULT_SEND_LIMITS.confirmThreshold;
+  const maxBatch = preview?.limits.maxBatch ?? DEFAULT_SEND_LIMITS.maxBatch;
+  const maxPerDay = preview?.limits.maxPerDay ?? DEFAULT_SEND_LIMITS.maxPerDay;
+  const sentToday = preview?.sentToday ?? 0;
+  const remainingToday = Math.max(0, maxPerDay - sentToday);
+  const willSend = Math.min(pending, maxBatch, remainingToday);
+  const large = pending > confirmThreshold;
+  const estSeconds = Math.round((preview?.limits.throttleMs ?? 0) * willSend / 1000);
+
+  return (
+    <Dialog
+      open={campaign !== null}
+      onOpenChange={(open) => {
+        if (!open && !sending) onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            Send to {pending} recipient{pending === 1 ? "" : "s"}?
+          </DialogTitle>
+          <DialogDescription>
+            Real emails go out from your connected mailbox as throttled batches.
+            Recipients receive the campaign message immediately — double-check the
+            message and the list before confirming.
+          </DialogDescription>
+        </DialogHeader>
+
+        {preview === undefined ? (
+          <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" /> Checking recipients…
+          </div>
+        ) : (
+          <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Pending recipients</span>
+              <span className="tabular font-medium">{pending}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">This run will send</span>
+              <span className="tabular font-medium">{willSend}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Batch limit</span>
+              <span className="tabular">{maxBatch} per send</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Daily limit</span>
+              <span className="tabular">
+                {maxPerDay}/day · {sentToday} used today
+              </span>
+            </div>
+            {pending > willSend && willSend > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {pending - willSend} stay pending — press send again after this run.
+              </p>
+            )}
+            {large && willSend > 0 && (
+              <p className="flex items-start gap-1.5 rounded-md border border-[#a06b3c]/35 bg-[#a06b3c]/[0.08] p-2 text-xs leading-relaxed text-[#82552e]">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                Large send: {willSend} emails, roughly {estSeconds}s to complete
+                {estSeconds > 0 ? "" : "."} Make sure the message is final — it goes to everyone at
+                once.
+              </p>
+            )}
+            {willSend === 0 && (
+              <p className="text-xs font-medium text-[#82552e]">
+                {pending === 0
+                  ? "Nothing pending — every recipient is already handled."
+                  : "Today's daily sending limit is reached — sending resumes tomorrow."}
+              </p>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={sending}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => campaign && void onConfirm(campaign)}
+            disabled={sending || preview === undefined || willSend === 0}
+          >
+            {sending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" /> Sending…
+              </>
+            ) : (
+              `Send ${willSend} email${willSend === 1 ? "" : "s"}`
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -2,25 +2,11 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-
-const LEAD_STATUS_VALUES = [
-  "new",
-  "contacted", // legacy value, displayed as Qualified
-  "qualified", // canonical for new writes
-  "discovery",
-  "proposal",
-  "interested", // legacy value, displayed as Negotiation
-  "negotiation", // canonical for new writes
-  "won",
-  "lost",
-];
-
-/** One-way normalization: canonical writes, legacy values accepted and mapped. */
-function canonicalStatus(status: string): string {
-  if (status === "qualified") return "contacted";
-  if (status === "negotiation") return "interested";
-  return status;
-}
+import {
+  LEAD_STATUS_VALUES,
+  canonicalStatus,
+} from "../lib/leadStatus";
+import { buildExistingKeys, leadDedupKeys } from "../lib/csv";
 
 const LEAD_FIELDS = {
   name: v.string(),
@@ -141,11 +127,35 @@ export const bulkImport = mutation({
   args: { leads: v.array(v.object(LEAD_FIELDS)) },
   handler: async (ctx, { leads }) => {
     const userId = await requireUserId(ctx);
-    const ids = [];
+    // Server-side dedup re-check (production hardening §5): the client preview
+    // already filtered duplicates, but the server enforces the same keys so a
+    // stale page or racing tab can never silently create duplicate records.
+    // Duplicate = matching email, phone, or company+name of an existing lead
+    // or an earlier row in this batch. First occurrence wins; nothing is
+    // updated or deleted — duplicates are skipped entirely.
+    const existing = await ctx.db
+      .query("leads")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const keys = buildExistingKeys(existing);
+    const ids: Id<"leads">[] = [];
+    let duplicates = 0;
     for (const lead of leads) {
+      const k = leadDedupKeys(lead);
+      if (
+        (k.email && keys.emails.has(k.email)) ||
+        (k.phone && keys.phones.has(k.phone)) ||
+        (k.companyName && keys.companyNames.has(k.companyName))
+      ) {
+        duplicates++;
+        continue;
+      }
+      if (k.email) keys.emails.add(k.email);
+      if (k.phone) keys.phones.add(k.phone);
+      if (k.companyName) keys.companyNames.add(k.companyName);
       ids.push(await ctx.db.insert("leads", { userId, ...lead, status: "new" }));
     }
-    return ids;
+    return { ids, imported: ids.length, duplicates };
   },
 });
 
@@ -178,7 +188,12 @@ export const bulkSetStatus = mutation({
   },
 });
 
-/** One-time migration: rewrite legacy 'replied'/'meeting' rows into canonical stages. */
+/**
+ * One-time (idempotent) migration: rewrite legacy stage values ('replied' →
+ * 'discovery', 'meeting' → 'proposal') into canonical pipeline stages. Reads
+ * the shared LEGACY_STATUS_MAP so the server can never disagree with the UI.
+ * No rows are deleted; only the status field is patched.
+ */
 export const migrateStatuses = mutation({
   args: {},
   handler: async (ctx) => {
@@ -189,10 +204,9 @@ export const migrateStatuses = mutation({
       .collect();
     let migrated = 0;
     for (const lead of legacy) {
-      if (lead.status === "replied" || lead.status === "meeting") {
-        await ctx.db.patch(lead._id, {
-          status: lead.status === "replied" ? "discovery" : "proposal",
-        });
+      const canonical = canonicalStatus(lead.status);
+      if (canonical !== lead.status) {
+        await ctx.db.patch(lead._id, { status: canonical });
         migrated++;
       }
     }

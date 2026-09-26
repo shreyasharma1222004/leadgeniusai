@@ -57,7 +57,9 @@ const schema = defineSchema(
       linkedin: v.optional(v.string()),
       notes: v.optional(v.string()),
       tags: v.optional(v.array(v.string())),
-      // pipeline: new | contacted | replied | interested | meeting | won | lost
+      // pipeline stages (canonical): new | contacted | discovery | proposal |
+      // interested | won | lost. Legacy values replied/meeting map to
+      // discovery/proposal — see LEGACY_STATUS_MAP in src/lib/leadStatus.ts.
       status: v.string(),
       // AI-generated lead intelligence (null until analyzed)
       score: v.optional(v.number()),
@@ -152,6 +154,10 @@ const schema = defineSchema(
       // draft | active | completed
       status: v.string(),
       createdAt: v.number(),
+      // Timestamp while a send action is running — guards against concurrent
+      // double-sends. Cleared when the send finishes; stale locks (>2 min) are
+      // ignored so a crashed send can't block the campaign forever.
+      sendInProgressAt: v.optional(v.number()),
     }).index("by_user", ["userId"]),
 
     campaignLeads: defineTable({

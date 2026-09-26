@@ -12,6 +12,7 @@ import { money } from "@/lib/growth";
 import {
   LEAD_STATUS_LABELS,
   PIPELINE_ORDER,
+  canonicalStatus,
   defaultProbability,
   statusClasses,
   weightedValue,
@@ -20,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import { CircleDollarSign, Users } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
@@ -31,8 +32,18 @@ export default function PipelinePage() {
   const leads = useQuery(api.leads.list, {});
   const bulkSetStatus = useMutation(api.leads.bulkSetStatus);
   const updateDeal = useMutation(api.leads.updateDeal);
+  const migrateStatuses = useMutation(api.leads.migrateStatuses);
   const [dragId, setDragId] = useState<Id<"leads"> | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
+
+  // One-time legacy-stage normalization (replied/meeting → discovery/proposal).
+  // Idempotent: a no-op once every row is canonical. Read-time canonicalization
+  // below keeps old rows visible even before this runs.
+  const hasLegacy =
+    leads !== undefined && leads.some((l) => canonicalStatus(l.status) !== l.status);
+  useEffect(() => {
+    if (hasLegacy) void migrateStatuses({});
+  }, [hasLegacy, migrateStatuses]);
 
   if (authLoading || leads === undefined) {
     return (
@@ -86,16 +97,22 @@ export default function PipelinePage() {
     }
   };
 
+  // Group by canonical stage so legacy rows (replied/meeting/qualified/
+  // negotiation) always land in a visible column.
+  const byCanonicalStage = (status: string) =>
+    leads.filter((l) => canonicalStatus(l.status) === status);
+
   // Column totals
   const colTotal = (status: string) =>
-    leads
-      .filter((l) => l.status === status)
-      .reduce((s, l) => s + (l.dealValue ?? 0), 0);
+    byCanonicalStage(status).reduce((s, l) => s + (l.dealValue ?? 0), 0);
   const weightedTotal = leads
-    .filter((l) => !["won", "lost"].includes(l.status))
-    .reduce((s, l) => s + weightedValue(l.dealValue, l.probability, l.status), 0);
+    .filter((l) => !["won", "lost"].includes(canonicalStatus(l.status)))
+    .reduce(
+      (s, l) => s + weightedValue(l.dealValue, l.probability, canonicalStatus(l.status)),
+      0,
+    );
   const pipelineTotal = leads
-    .filter((l) => !["won", "lost"].includes(l.status))
+    .filter((l) => !["won", "lost"].includes(canonicalStatus(l.status)))
     .reduce((s, l) => s + (l.dealValue ?? 0), 0);
 
   return (
@@ -119,7 +136,7 @@ export default function PipelinePage() {
       </p>
       <div className="flex gap-3 overflow-x-auto pb-4">
         {PIPELINE_ORDER.map((status) => {
-          const columnLeads = leads.filter((l) => l.status === status);
+          const columnLeads = byCanonicalStage(status);
           const isOver = overColumn === status;
           const isDragging = dragId !== null;
           return (
@@ -309,14 +326,14 @@ function DealCard({
               </div>
               <div className="grid gap-1">
                 <Label htmlFor={`dp-${lead._id}`} className="text-xs">
-                  Probability % — default {defaultProbability(lead.status)}
+                  Probability % — default {defaultProbability(canonicalStatus(lead.status))}
                 </Label>
                 <Input
                   id={`dp-${lead._id}`}
                   value={probability}
                   onChange={(e) => setProbability(e.target.value)}
                   inputMode="numeric"
-                  placeholder={`${defaultProbability(lead.status)}`}
+                  placeholder={`${defaultProbability(canonicalStatus(lead.status))}`}
                   className="h-8 text-sm"
                 />
               </div>
@@ -342,7 +359,9 @@ function DealCard({
           </PopoverContent>
         </Popover>
         <span className="tabular text-[11px] text-muted-foreground">
-          {lead.probability !== undefined ? `${lead.probability}%` : `${defaultProbability(lead.status)}% est.`}
+          {lead.probability !== undefined
+            ? `${lead.probability}%`
+            : `${defaultProbability(canonicalStatus(lead.status))}% est.`}
         </span>
       </div>
 

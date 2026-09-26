@@ -86,14 +86,24 @@ const USE_CASES = [
   },
 ];
 
+// Pricing — production hardening §3: there is NO billing system or usage
+// enforcement yet, so paid tiers are marked "Coming soon" and plans make no
+// usage-limit claims (nothing enforces lead caps or send caps today). The free
+// workspace is simply the whole product during early access.
 const PRICING = [
   {
     name: "Free",
     monthly: 0,
     yearly: 0,
-    blurb: "For your first ten prospects.",
-    features: ["10 leads", "5 AI generations", "Basic pipeline"],
+    blurb: "Everything you need to run outbound.",
+    features: [
+      "Full CRM: leads, pipeline, deals",
+      "AI lead briefs",
+      "Campaigns with send controls",
+      "Inbox, tasks & analytics",
+    ],
     cta: "Start for free",
+    comingSoon: false,
     highlight: false,
   },
   {
@@ -102,12 +112,13 @@ const PRICING = [
     yearly: 399,
     blurb: "For a steady solo pipeline.",
     features: [
-      "100 leads",
-      "Unlimited AI generation",
-      "Follow-up reminders",
-      "Analytics",
+      "Everything in Free",
+      "Higher sending limits",
+      "Follow-up automations",
+      "Advanced analytics",
     ],
-    cta: "Start for free",
+    cta: "Coming soon",
+    comingSoon: true,
     highlight: false,
   },
   {
@@ -116,13 +127,13 @@ const PRICING = [
     yearly: 1199,
     blurb: "For serious outbound motion.",
     features: [
-      "500+ leads",
-      "Lead intelligence",
-      "Campaigns",
-      "Advanced analytics",
-      "AI assistant",
+      "Everything in Starter",
+      "Team workspaces",
+      "Priority support",
+      "Early access to new modules",
     ],
-    cta: "Start for free",
+    cta: "Coming soon",
+    comingSoon: true,
     highlight: true,
   },
   {
@@ -136,7 +147,8 @@ const PRICING = [
       "Integrations",
       "Priority support",
     ],
-    cta: "Talk to us",
+    cta: "Coming soon",
+    comingSoon: true,
     highlight: false,
   },
 ];
@@ -148,7 +160,7 @@ const FAQS = [
   },
   {
     q: "Is there a limit on leads?",
-    a: "The Free plan covers 10 leads. Starter covers 100, Pro covers 500+, and Business is custom. You can upgrade, downgrade, or export your data at any time.",
+    a: "Not today. During early access the free workspace includes the whole product with no enforced lead or sending caps. Paid plans with explicit usage limits are coming soon — nothing is billed until then, and you can export your data at any time.",
   },
   {
     q: "Who can see my lead data?",
@@ -172,7 +184,7 @@ const FAQS = [
   },
   {
     q: "Can I cancel anytime?",
-    a: "Yes. Monthly plans cancel at the end of the billing period, yearly plans are refundable in the first 14 days. Your data stays exportable regardless.",
+    a: "Billing isn't live yet — paid plans are coming soon, and nothing is charged until subscriptions actually launch. Your data stays exportable regardless, and we'll announce plan terms before any checkout exists.",
   },
 ];
 
@@ -438,9 +450,20 @@ export default function Landing() {
                       </li>
                     ))}
                   </ul>
-                  <Button asChild className="mt-5" variant={tier.highlight ? "default" : "outline"}>
-                    <Link to="/auth">{tier.cta}</Link>
-                  </Button>
+                  {tier.comingSoon ? (
+                    <Button
+                      className="mt-5"
+                      variant="outline"
+                      disabled
+                      title="Paid plans are coming soon — billing is not live yet"
+                    >
+                      Coming soon
+                    </Button>
+                  ) : (
+                    <Button asChild className="mt-5" variant={tier.highlight ? "default" : "outline"}>
+                      <Link to="/auth">{tier.cta}</Link>
+                    </Button>
+                  )}
                 </div>
               );
             })}

@@ -94,25 +94,219 @@ export interface NormalizedLead {
   notes?: string;
 }
 
-/** Turn mapped CSV rows into lead objects; skips rows without a name. */
-export function buildLeadsFromMapping(
+// ── Validation + deduplication (production hardening §5) ───────────────────
+//
+// One source of truth for import dedup keys, shared by the client preview and
+// the server-side bulkImport re-check, so what the user confirms is what the
+// server actually does. Duplicate keys (any match marks the row a duplicate):
+//   • email  — lowercased/trimmed
+//   • phone  — digits only, ≥7 digits
+//   • company + name — both lowercased/trimmed, only when company is present
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+export function isValidEmail(email: string): boolean {
+  return EMAIL_RE.test(email.trim());
+}
+
+export function normalizeEmail(email?: string): string | null {
+  const e = email?.trim().toLowerCase();
+  return e ? e : null;
+}
+
+/** Digits-only phone key; null when missing or too short to be meaningful. */
+export function normalizePhone(phone?: string): string | null {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  return digits.length >= 7 ? digits : null;
+}
+
+export function normalizeCompanyName(company?: string): string | null {
+  const c = company?.trim().toLowerCase();
+  return c ? c : null;
+}
+
+export interface LeadKeyInput {
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+}
+
+/** The dedup keys for one lead — used for in-file and against-CRM checks. */
+export function leadDedupKeys(lead: LeadKeyInput): {
+  email: string | null;
+  phone: string | null;
+  companyName: string | null;
+} {
+  const companyName = normalizeCompanyName(lead.company)
+    ? `${normalizeCompanyName(lead.company)}|${lead.name.trim().toLowerCase()}`
+    : null;
+  return {
+    email: normalizeEmail(lead.email),
+    phone: normalizePhone(lead.phone),
+    companyName,
+  };
+}
+
+/** Key sets over the user's existing CRM leads, for against-CRM dedupe. */
+export interface ExistingLeadKeys {
+  emails: Set<string>;
+  phones: Set<string>;
+  companyNames: Set<string>;
+}
+
+export function buildExistingKeys(
+  leads: LeadKeyInput[],
+): ExistingLeadKeys {
+  const keys: ExistingLeadKeys = { emails: new Set(), phones: new Set(), companyNames: new Set() };
+  for (const lead of leads) {
+    const k = leadDedupKeys(lead);
+    if (k.email) keys.emails.add(k.email);
+    if (k.phone) keys.phones.add(k.phone);
+    if (k.companyName) keys.companyNames.add(k.companyName);
+  }
+  return keys;
+}
+
+export type RowStatus = "new" | "duplicate" | "invalid";
+
+export interface AnalyzedRow {
+  rowNumber: number; // 1-based data row (header not counted)
+  lead: NormalizedLead | null;
+  status: RowStatus;
+  /** Why the row was marked duplicate/invalid (empty for new rows). */
+  reason?: string;
+}
+
+export interface ImportAnalysis {
+  /** All data rows in the file (what "total rows" means in the preview). */
+  totalRows: number;
+  newCount: number;
+  duplicateCount: number;
+  invalidCount: number;
+  /** "Skipped" = everything not imported = duplicates + invalid. */
+  skippedCount: number;
+  /** Only the rows that will actually be inserted. */
+  newLeads: NormalizedLead[];
+  /** Human-readable reasons, capped for display. */
+  duplicateReasons: string[];
+  invalidReasons: string[];
+}
+
+/** Turn mapped CSV rows into per-row candidates (rows without a name → null lead). */
+export function buildRowCandidates(
   rows: string[][],
   mapping: (LeadField | "skip")[],
-): { leads: NormalizedLead[]; skipped: number } {
-  const leads: NormalizedLead[] = [];
-  let skipped = 0;
-  for (const cells of rows) {
+): { rowNumber: number; lead: NormalizedLead | null }[] {
+  return rows.map((cells, i) => {
     const lead: Record<string, string> = {};
     mapping.forEach((field, col) => {
       if (field === "skip") return;
       const value = (cells[col] ?? "").trim();
       if (value) lead[field] = value;
     });
-    if (!lead.name) {
-      skipped++;
+    const rowNumber = i + 1;
+    if (!lead.name) return { rowNumber, lead: null };
+    return { rowNumber, lead: lead as unknown as NormalizedLead };
+  });
+}
+
+/**
+ * Full import analysis: validate required fields, detect duplicates within
+ * the file AND against the existing CRM, and classify every row. First
+ * occurrence wins — later rows matching an earlier row are duplicates.
+ */
+export function analyzeImportRows(
+  candidates: { rowNumber: number; lead: NormalizedLead | null }[],
+  existing: ExistingLeadKeys,
+): ImportAnalysis {
+  const analysis: ImportAnalysis = {
+    totalRows: candidates.length,
+    newCount: 0,
+    duplicateCount: 0,
+    invalidCount: 0,
+    skippedCount: 0,
+    newLeads: [],
+    duplicateReasons: [],
+    invalidReasons: [],
+  };
+
+  // In-file dedup state — starts empty, grows as new rows are accepted.
+  const seenEmails = new Set<string>();
+  const seenPhones = new Set<string>();
+  const seenCompanyNames = new Set<string>();
+
+  for (const { rowNumber, lead } of candidates) {
+    // Validation first: required name + sane email/phone when present.
+    if (!lead) {
+      analysis.invalidCount++;
+      if (analysis.invalidReasons.length < 5)
+        analysis.invalidReasons.push(`Row ${rowNumber}: missing name (required)`);
       continue;
     }
-    leads.push(lead as unknown as NormalizedLead);
+    if (lead.email && !isValidEmail(lead.email)) {
+      analysis.invalidCount++;
+      if (analysis.invalidReasons.length < 5)
+        analysis.invalidReasons.push(`Row ${rowNumber}: invalid email “${lead.email}”`);
+      continue;
+    }
+    if (lead.phone && !normalizePhone(lead.phone)) {
+      analysis.invalidCount++;
+      if (analysis.invalidReasons.length < 5)
+        analysis.invalidReasons.push(`Row ${rowNumber}: phone number too short`);
+      continue;
+    }
+
+    const keys = leadDedupKeys(lead);
+
+    // Against-CRM duplicates.
+    if (keys.email && existing.emails.has(keys.email)) {
+      analysis.duplicateCount++;
+      if (analysis.duplicateReasons.length < 5)
+        analysis.duplicateReasons.push(`Row ${rowNumber}: email already in your CRM`);
+      continue;
+    }
+    if (keys.phone && existing.phones.has(keys.phone)) {
+      analysis.duplicateCount++;
+      if (analysis.duplicateReasons.length < 5)
+        analysis.duplicateReasons.push(`Row ${rowNumber}: phone already in your CRM`);
+      continue;
+    }
+    if (keys.companyName && existing.companyNames.has(keys.companyName)) {
+      analysis.duplicateCount++;
+      if (analysis.duplicateReasons.length < 5)
+        analysis.duplicateReasons.push(`Row ${rowNumber}: same company + name already in your CRM`);
+      continue;
+    }
+
+    // Within-file duplicates (later rows matching an earlier row).
+    if (keys.email && seenEmails.has(keys.email)) {
+      analysis.duplicateCount++;
+      if (analysis.duplicateReasons.length < 5)
+        analysis.duplicateReasons.push(`Row ${rowNumber}: duplicate email in this file`);
+      continue;
+    }
+    if (keys.phone && seenPhones.has(keys.phone)) {
+      analysis.duplicateCount++;
+      if (analysis.duplicateReasons.length < 5)
+        analysis.duplicateReasons.push(`Row ${rowNumber}: duplicate phone in this file`);
+      continue;
+    }
+    if (keys.companyName && seenCompanyNames.has(keys.companyName)) {
+      analysis.duplicateCount++;
+      if (analysis.duplicateReasons.length < 5)
+        analysis.duplicateReasons.push(`Row ${rowNumber}: duplicate company + name in this file`);
+      continue;
+    }
+
+    // Genuinely new — record its keys so later rows dedupe against it.
+    if (keys.email) seenEmails.add(keys.email);
+    if (keys.phone) seenPhones.add(keys.phone);
+    if (keys.companyName) seenCompanyNames.add(keys.companyName);
+    analysis.newCount++;
+    analysis.newLeads.push(lead);
   }
-  return { leads, skipped };
+
+  analysis.skippedCount = analysis.duplicateCount + analysis.invalidCount;
+  return analysis;
 }

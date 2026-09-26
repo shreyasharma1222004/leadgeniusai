@@ -2,12 +2,30 @@
  * Lead / deal pipeline stages, shared between the UI and server functions.
  *
  * The CRM pipeline: New → Qualified → Discovery → Proposal → Negotiation → Won/Lost.
- * Two legacy statuses remain valid data values ("contacted", "interested") and are
- * surfaced under their new names so no data migration is ever required:
- *   contacted   → shown as "Qualified"  (first touch made, worth pursuing)
- *   interested  → shown as "Negotiation" (warm lead deep in conversation)
- * New records use the canonical stages below.
+ * Legacy statuses are valid data values surfaced under their canonical names so no
+ * data migration is ever REQUIRED — but a server-side migration exists and old
+ * records are normalized opportunistically (see PIPELINE_ORDER note below):
+ *   contacted   → "Qualified"   (first touch made, worth pursuing)
+ *   interested  → "Negotiation" (warm lead deep in conversation)
+ *   replied     → "Discovery"   (pre-2025-09 inbox logs; reply = engaged)
+ *   meeting     → "Proposal"    (pre-2025-09 inbox logs; meeting requested = proposal talk)
+ * New records use the canonical stages below only.
  */
+
+/** Legacy status values still present in old records → their canonical stage. */
+export const LEGACY_STATUS_MAP: Record<string, LeadStatus> = {
+  replied: "discovery",
+  meeting: "proposal",
+};
+
+/**
+ * Map any status value (canonical or legacy) to a canonical pipeline stage.
+ * Shared by the UI (grouping/labels) and server mutations (writes) so Leads and
+ * Pipeline can never disagree about what a lead's stage is.
+ */
+export function canonicalStatus(status: string): LeadStatus {
+  return LEGACY_STATUS_MAP[status] ?? (status as LeadStatus);
+}
 export const LEAD_STATUSES = [
   "new",
   "contacted",
@@ -43,13 +61,15 @@ export const LEAD_STATUS_CLASSES: Record<LeadStatus, string> = {
   lost: "border border-border bg-transparent text-muted-foreground/60 line-through decoration-border",
 };
 
+/** Label for any status value — legacy values resolve to their canonical label. */
 export function statusLabel(status: string): string {
-  return LEAD_STATUS_LABELS[status as LeadStatus] ?? status;
+  const canonical = canonicalStatus(status);
+  return LEAD_STATUS_LABELS[canonical] ?? canonical;
 }
 
 export function statusClasses(status: string): string {
   return (
-    LEAD_STATUS_CLASSES[status as LeadStatus] ??
+    LEAD_STATUS_CLASSES[canonicalStatus(status)] ??
     "bg-secondary text-secondary-foreground"
   );
 }
@@ -85,6 +105,18 @@ export const PIPELINE_VALUE_STATUSES: readonly string[] = [
 ];
 
 /**
+ * Stages that count as "replied / engaged" for reply-rate metrics: a lead that
+ * has moved into Discovery or beyond without closing. Documented definition —
+ * see §Metric definitions in src/lib/growth.ts.
+ */
+export const REPLIED_STATUSES: readonly string[] = [
+  "discovery",
+  "proposal",
+  "interested",
+  "won",
+];
+
+/**
  * Sensible default close probability per stage (0–100). Used to suggest a
  * value when none is set and to compute weighted pipeline. Estimates, not
  * facts — labelled as such wherever shown.
@@ -100,7 +132,7 @@ export const DEFAULT_PROBABILITY: Record<LeadStatus, number> = {
 };
 
 export function defaultProbability(status: string): number {
-  return DEFAULT_PROBABILITY[status as LeadStatus] ?? 10;
+  return DEFAULT_PROBABILITY[canonicalStatus(status)] ?? 10;
 }
 
 /** Weighted deal value = value × probability. */
@@ -112,5 +144,7 @@ export function weightedValue(dealValue: number | undefined, probability: number
 
 /** Whether a lead counts as "qualified" for KPI purposes. */
 export function isQualified(status: string): boolean {
-  return ["contacted", "discovery", "proposal", "interested", "won"].includes(status);
+  return ["contacted", "discovery", "proposal", "interested", "won"].includes(
+    canonicalStatus(status),
+  );
 }

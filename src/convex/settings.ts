@@ -6,10 +6,26 @@ import { v } from "convex/values";
  * Which provider the next send will use — powers the Integrations page.
  * Lives here (not in emailDelivery.ts) because only actions may run in
  * "use node" modules.
+ *
+ * Production hardening §6: this query previously had NO auth check and
+ * returned the Gmail sender address to any caller, including anonymous
+ * ones. It now requires a signed-in user; unauthenticated callers only
+ * ever get the neutral built-in shape (from: null) and never see the
+ * configured sender address or provider credentials.
  */
 export const deliveryStatus = query({
   args: {},
-  handler: async () => {
+  handler: async (ctx) => {
+    const NEUTRAL = {
+      provider: "built-in" as const,
+      from: null,
+      domainRequired: false,
+    };
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return NEUTRAL;
+    // Single-workspace deployment: email credentials are deployment-level
+    // (platform env), so every authenticated workspace member sees the same
+    // status — but only after authentication.
     if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
       return {
         provider: "gmail" as const,
@@ -24,11 +40,7 @@ export const deliveryStatus = query({
         domainRequired: !process.env.RESEND_FROM_EMAIL,
       };
     }
-    return {
-      provider: "built-in" as const,
-      from: null,
-      domainRequired: false,
-    };
+    return NEUTRAL;
   },
 });
 

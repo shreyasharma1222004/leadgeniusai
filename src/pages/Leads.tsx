@@ -29,7 +29,15 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import { initials, timeAgo } from "@/lib/format";
-import { LEAD_STATUSES, LEAD_STATUS_LABELS, statusClasses, statusLabel } from "@/lib/leadStatus";
+import {
+  LEAD_STATUSES,
+  LEAD_STATUS_LABELS,
+  OPEN_STATUSES,
+  REPLIED_STATUSES,
+  canonicalStatus,
+  statusClasses,
+  statusLabel,
+} from "@/lib/leadStatus";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
@@ -549,12 +557,12 @@ function MetricsHero({ leads, followUpDue }: { leads: Doc2[]; followUpDue: numbe
     const contacted = leads.filter(
       (l) =>
         l.lastContactedAt !== undefined ||
-        ["contacted", "replied", "interested", "meeting", "won"].includes(l.status),
+        OPEN_STATUSES.includes(canonicalStatus(l.status)),
     ).length;
     const replies = leads.filter((l) =>
-      ["replied", "interested", "meeting", "won"].includes(l.status),
+      REPLIED_STATUSES.includes(canonicalStatus(l.status)),
     ).length;
-    const meetings = leads.filter((l) => l.status === "meeting" || l.status === "won").length;
+    const meetings = leads.filter((l) => ["proposal", "interested", "won"].includes(canonicalStatus(l.status))).length;
     const won = leads.filter((l) => l.status === "won").length;
 
     const pct = (v: number) => (total === 0 ? 0 : Math.round((v / total) * 100));

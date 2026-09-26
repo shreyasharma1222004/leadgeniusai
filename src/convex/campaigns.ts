@@ -1,7 +1,22 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type QueryCtx,
+} from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { resolveSendLimits, type SendLimits } from "../lib/sendLimits";
+
+// How long a send lock is trusted. A send that crashes without releasing its
+// lock only blocks the campaign for this long.
+const SEND_LOCK_TTL_MS = 2 * 60 * 1000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ── Queries ────────────────────────────────────────────────────────────────
 
@@ -177,43 +192,161 @@ export const removeLead = mutation({
 
 // ── Sending ────────────────────────────────────────────────────────────────
 
-/** Send the campaign message to every pending recipient. */
-export const sendAll = action({
+/**
+ * What the UI shows before confirming a send: pending recipients, the limits
+ * in force, and how much of today's daily allowance is already used.
+ */
+export const sendPreview = query({
   args: { id: v.id("campaigns") },
   handler: async (ctx, { id }) => {
     const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
+    const campaign = await ctx.db.get(id);
+    if (!campaign || campaign.userId !== userId) return null;
+    const rows = await ctx.db
+      .query("campaignLeads")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", id))
+      .collect();
+    const pending = rows.filter((r) => r.userId === userId && r.status === "pending").length;
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const sentToday = await countRealSendsSince(ctx, userId, startOfDay.getTime());
+    return {
+      pending,
+      sentToday,
+      limits: resolveSendLimits(process.env),
+      sendInProgressAt: campaign.sendInProgressAt ?? null,
+    };
+  },
+});
+
+/** Count real (delivered-attempt) outbound sends for a user since a timestamp. */
+async function countRealSendsSince(ctx: QueryCtx, userId: Id<"users">, since: number) {
+  const msgs = await ctx.db
+    .query("messages")
+    .withIndex("by_user_created", (q) => q.eq("userId", userId).gte("createdAt", since))
+    .collect();
+  return msgs.filter((m) => m.direction === "sent" && m.status === "sent" && m.provider !== "manual")
+    .length;
+}
+
+/**
+ * Send the campaign message to pending recipients — with safety rails
+ * (production hardening §4):
+ *   • batch cap      — at most `maxBatch` recipients per invocation
+ *   • daily cap      — per-user, per-UTC-day cap on real sends
+ *   • throttling     — pause between individual emails
+ *   • duplicate lock — a time-based lock prevents concurrent double-sends
+ *   • per-row status — every attempt is recorded; the client shows counts
+ * Rows left pending by the caps stay pending — press send again to continue.
+ * Limits resolve from CAMPAIGN_* env vars (see src/lib/sendLimits.ts) so they
+ * can later be tied to subscription plans without touching this action.
+ */
+interface SendAllResult {
+  sent: number;
+  failed: number;
+  skipped: number;
+  failures: string[];
+  reason?: string;
+  limits: SendLimits;
+}
+
+export const sendAll = action({
+  args: { id: v.id("campaigns") },
+  // Explicit return type: this action goes through the generated API barrel,
+  // which includes this module — without the annotation TypeScript infers
+  // sendAll's type from itself and never terminates.
+  handler: async (ctx, { id }): Promise<SendAllResult> => {
+    const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("You need to sign in to do that.");
+
+    const limits = resolveSendLimits(process.env);
 
     const campaign = await ctx.runQuery(internal.campaigns.getOwned, { id, userId });
     if (!campaign) throw new Error("Campaign not found.");
-    const fromName = await ctx.runQuery(internal.campaigns.senderName, { userId });
 
-    const rows = await ctx.runQuery(internal.campaigns.pendingRows, { id, userId });
-    if (rows.length === 0) {
+    // Duplicate-send guard: acquire the time-based lock first.
+    const now = Date.now();
+    const acquired = await ctx.runMutation(internal.campaigns.acquireSendLock, { id, at: now });
+    if (!acquired) {
       return {
         sent: 0,
         failed: 0,
         skipped: 0,
         failures: [] as string[],
-        reason: "Nothing pending — every recipient is already handled.",
+        reason:
+          "A send is already in progress for this campaign. Wait a moment and check recipient statuses before sending again.",
+        limits,
       };
     }
 
-    let sent = 0;
-    let failed = 0;
-    const failures: string[] = [];
+    try {
+      const fromName = await ctx.runQuery(internal.campaigns.senderName, { userId });
+      const rows = await ctx.runQuery(internal.campaigns.pendingRows, { id, userId });
+      if (rows.length === 0) {
+        return {
+          sent: 0,
+          failed: 0,
+          skipped: 0,
+          failures: [] as string[],
+          reason: "Nothing pending — every recipient is already handled.",
+          limits,
+        };
+      }
 
-    for (const row of rows) {
-      try {
-        const email = await ctx.runQuery(internal.campaigns.leadEmail, {
-          leadId: row.leadId,
-          userId,
-        });
-        if (!email) {
+      // Daily cap: count this user's real sends since the start of the UTC day.
+      const startOfDay = new Date();
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      const sentToday = await ctx.runQuery(internal.campaigns.sendsToday, {
+        userId,
+        since: startOfDay.getTime(),
+      });
+      const dailyRemaining = Math.max(0, limits.maxPerDay - sentToday);
+      const budget = Math.min(rows.length, limits.maxBatch, dailyRemaining);
+
+      let sent = 0;
+      let failed = 0;
+      const failures: string[] = [];
+
+      for (const [index, row] of rows.slice(0, budget).entries()) {
+        // Throttle between sends (not before the first) to be a polite sender.
+        if (limits.throttleMs > 0 && index > 0) await sleep(limits.throttleMs);
+        try {
+          const email = await ctx.runQuery(internal.campaigns.leadEmail, {
+            leadId: row.leadId,
+            userId,
+          });
+          if (!email) {
+            await ctx.runMutation(internal.campaigns.markRow, {
+              rowId: row._id,
+              status: "failed",
+              error: "No email address on the lead",
+            });
+            await ctx.runMutation(api.messages.logCampaignSend, {
+              leadId: row.leadId,
+              campaignId: id,
+              channel: campaign.channel,
+              subject: campaign.subject,
+              body: campaign.body,
+              status: "failed",
+              error: "No email address on the lead",
+            });
+            failed++;
+            failures.push("A lead is missing an email address");
+            continue;
+          }
+
+          await ctx.runAction(internal.emailDelivery.deliverEmail, {
+            to: email,
+            subject: campaign.subject ?? campaign.name,
+            text: campaign.body,
+            fromName: fromName ?? undefined,
+          });
+
           await ctx.runMutation(internal.campaigns.markRow, {
             rowId: row._id,
-            status: "failed",
-            error: "No email address on the lead",
+            status: "sent",
+            error: undefined,
           });
           await ctx.runMutation(api.messages.logCampaignSend, {
             leadId: row.leadId,
@@ -221,49 +354,43 @@ export const sendAll = action({
             channel: campaign.channel,
             subject: campaign.subject,
             body: campaign.body,
+            status: "sent",
+          });
+          await ctx.runMutation(internal.campaigns.markContacted, { leadId: row.leadId, userId });
+          sent++;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown send error";
+          await ctx.runMutation(internal.campaigns.markRow, {
+            rowId: row._id,
             status: "failed",
-            error: "No email address on the lead",
+            error: message,
           });
           failed++;
-          failures.push("A lead is missing an email address");
-          continue;
+          failures.push(message);
         }
-
-        await ctx.runAction(internal.emailDelivery.deliverEmail, {
-          to: email,
-          subject: campaign.subject ?? campaign.name,
-          text: campaign.body,
-          fromName: fromName ?? undefined,
-        });
-
-        await ctx.runMutation(internal.campaigns.markRow, {
-          rowId: row._id,
-          status: "sent",
-          error: undefined,
-        });
-        await ctx.runMutation(api.messages.logCampaignSend, {
-          leadId: row.leadId,
-          campaignId: id,
-          channel: campaign.channel,
-          subject: campaign.subject,
-          body: campaign.body,
-          status: "sent",
-        });
-        await ctx.runMutation(internal.campaigns.markContacted, { leadId: row.leadId, userId });
-        sent++;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown send error";
-        await ctx.runMutation(internal.campaigns.markRow, {
-          rowId: row._id,
-          status: "failed",
-          error: message,
-        });
-        failed++;
-        failures.push(message);
       }
-    }
 
-    return { sent, failed, skipped: 0, failures: [...new Set(failures)].slice(0, 3) };
+      // Anything not attempted this run stays pending for the next send.
+      const deferred = rows.length - budget;
+      let reason: string | undefined;
+      if (deferred > 0) {
+        reason =
+          dailyRemaining <= 0
+            ? `Daily sending limit reached (${limits.maxPerDay} sends per day). ${deferred} recipient${deferred === 1 ? "" : "s"} remain pending — try again tomorrow.`
+            : `Batch limit: sent up to ${limits.maxBatch} this run. ${deferred} recipient${deferred === 1 ? "" : "s"} remain pending — press send again to continue.`;
+      }
+
+      return {
+        sent,
+        failed,
+        skipped: deferred,
+        failures: [...new Set(failures)].slice(0, 3),
+        reason,
+        limits,
+      };
+    } finally {
+      await ctx.runMutation(internal.campaigns.releaseSendLock, { id, at: now });
+    }
   },
 });
 
@@ -362,4 +489,35 @@ export const markContacted = internalMutation({
       lastContactedAt: Date.now(),
     });
   },
+});
+
+// ── Send-lock + daily-count internals ──────────────────────────────────────
+
+/** Acquire the send lock if no live lock exists. Returns false when busy. */
+export const acquireSendLock = internalMutation({
+  args: { id: v.id("campaigns"), at: v.number() },
+  handler: async (ctx, { id, at }) => {
+    const campaign = await ctx.db.get(id);
+    if (!campaign) return false;
+    const existing = campaign.sendInProgressAt;
+    if (existing !== undefined && Date.now() - existing < SEND_LOCK_TTL_MS) return false;
+    await ctx.db.patch(id, { sendInProgressAt: at });
+    return true;
+  },
+});
+
+/** Release the send lock (only if we still own it). */
+export const releaseSendLock = internalMutation({
+  args: { id: v.id("campaigns"), at: v.number() },
+  handler: async (ctx, { id, at }) => {
+    const campaign = await ctx.db.get(id);
+    if (!campaign || campaign.sendInProgressAt !== at) return;
+    await ctx.db.patch(id, { sendInProgressAt: undefined });
+  },
+});
+
+/** Real email sends since a timestamp — used to enforce the daily cap. */
+export const sendsToday = internalQuery({
+  args: { userId: v.id("users"), since: v.number() },
+  handler: async (ctx, { userId, since }) => countRealSendsSince(ctx, userId, since),
 });
