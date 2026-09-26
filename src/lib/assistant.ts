@@ -176,6 +176,76 @@ export function askAssistant(
     };
   }
 
+  // Business copilot: "what should I work on" → today's plan (§27)
+  if (/\b(work on|what should i|priorit|plan|today|next step)\b/.test(q)) {
+    const now = Date.now();
+    const overdue = followUps.filter((f) => f.status === "pending" && f.dueAt < now);
+    const unread = messages.filter((m) => m.direction === "received" && !m.readAt);
+    const proposalsOut = leads.filter((l) => l.status === "proposal").length;
+    const fresh = leads.filter((l) => l.status === "new");
+    const lines: string[] = [];
+    if (overdue.length > 0)
+      lines.push(`1. Follow up with ${leads.find((l) => l._id === overdue[0].leadId)?.name ?? "a lead"} — overdue follow-up`);
+    if (unread.length > 0) lines.push(`${lines.length + 1}. Answer ${unread.length} waiting repl${unread.length === 1 ? "y" : "ies"}`);
+    if (proposalsOut > 0) lines.push(`${lines.length + 1}. Check on ${proposalsOut} open proposal${proposalsOut === 1 ? "" : "s"}`);
+    if (fresh.length >= 3) lines.push(`${lines.length + 1}. Send first outreach to ${Math.min(fresh.length, 3)} new leads`);
+    if (lines.length === 0)
+      return {
+        intent: "plan",
+        text: "Nothing urgent — your follow-ups are on schedule and replies are read.",
+        bullets: leads.length === 0 ? ["Your workspace is empty. Import leads to get a plan."] : ["Good day to add new leads or start a campaign."],
+        leadIds: [],
+      };
+    return {
+      intent: "plan",
+      text: "Today's plan, highest impact first:",
+      bullets: lines,
+      leadIds: overdue.slice(0, 2).map((f) => f.leadId),
+    };
+  }
+
+  // Hottest opportunities by deal value (§27)
+  if (/\b(opportunit|deal value|biggest deal|highest.value|worth the most)\b/.test(q)) {
+    const valued = leads
+      .filter((l) => !["won", "lost"].includes(l.status) && l.dealValue !== undefined)
+      .sort((a, b) => (b.dealValue ?? 0) - (a.dealValue ?? 0))
+      .slice(0, 5);
+    if (valued.length === 0)
+      return {
+        intent: "deals",
+        text: "No deal values set yet — add values in the Pipeline view and I can rank your opportunities.",
+        bullets: [],
+        leadIds: [],
+      };
+    return {
+      intent: "deals",
+      text: "Your most valuable open opportunities:",
+      bullets: valued.map(
+        (l) =>
+          `${l.name}${l.company ? ` (${l.company})` : ""} — $${(l.dealValue ?? 0).toLocaleString()} · ${LEAD_STATUS_LABELS[l.status as LeadStatus] ?? l.status}`,
+      ),
+      leadIds: valued.map((l) => l._id),
+    };
+  }
+
+  // Won / revenue question (§27)
+  if (/\b(revenue|won|closed|earn|income)\b/.test(q)) {
+    const won = leads.filter((l) => l.status === "won");
+    const valued = won.filter((l) => l.dealValue !== undefined);
+    const total = valued.reduce((s, l) => s + (l.dealValue ?? 0), 0);
+    return {
+      intent: "revenue",
+      text:
+        won.length === 0
+          ? "No closed-won deals yet. When you move a lead to Won, the revenue shows up here."
+          : valued.length === 0
+            ? `${won.length} deal${won.length === 1 ? "" : "s"} won — add deal values in Pipeline to see revenue.`
+            : `${won.length} deal${won.length === 1 ? "" : "s"} won, $${total.toLocaleString()} in recorded revenue:`,
+      bullets: valued.map((l) => `${l.name} — $${(l.dealValue ?? 0).toLocaleString()}`),
+      leadIds: valued.slice(0, 5).map((l) => l._id),
+    };
+  }
+
   // Default: quick overview + hint
   const open = leads.filter((l) => !["won", "lost"].includes(l.status)).length;
   const unread = messages.filter((m) => m.direction === "received" && !m.readAt).length;

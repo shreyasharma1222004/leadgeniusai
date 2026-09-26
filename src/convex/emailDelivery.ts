@@ -73,7 +73,7 @@ export const deliverEmail = internalAction({
     const resendKey = process.env.RESEND_API_KEY;
     if (resendKey) {
       const from =
-        process.env.RESEND_FROM_EMAIL ?? "DealFlow AI <onboarding@resend.dev>";
+        process.env.RESEND_FROM_EMAIL ?? "Dealflow AI <onboarding@resend.dev>";
       let response: Response;
       try {
         response = await fetch("https://api.resend.com/emails", {

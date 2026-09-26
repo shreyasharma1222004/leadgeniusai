@@ -34,6 +34,14 @@ const schema = defineSchema(
       // onboarding
       onboardedAt: v.optional(v.number()),
       company: v.optional(v.string()),
+
+      // business profile captured during onboarding (§51)
+      businessType: v.optional(v.string()),
+      sells: v.optional(v.string()),
+      audience: v.optional(v.string()),
+      growthGoal: v.optional(v.string()),
+      revenueGoal: v.optional(v.number()),
+      teamSize: v.optional(v.string()),
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
     leads: defineTable({
@@ -69,6 +77,15 @@ const schema = defineSchema(
       lastContactedAt: v.optional(v.number()),
       nextFollowUpAt: v.optional(v.number()),
       source: v.optional(v.string()),
+
+      // deal CRM fields (§17) — the lead IS the deal; one record per opportunity
+      dealValue: v.optional(v.number()),
+      probability: v.optional(v.number()), // 0–100, manual or AI-suggested
+      expectedCloseAt: v.optional(v.number()),
+      // lead intelligence (§11)
+      companySize: v.optional(v.string()),
+      revenue: v.optional(v.string()),
+      intent: v.optional(v.string()), // high | medium | low (free text preserved)
     })
       .index("by_user", ["userId"])
       .index("by_user_status", ["userId", "status"])

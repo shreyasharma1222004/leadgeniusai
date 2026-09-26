@@ -25,6 +25,7 @@ import {
   Menu,
   Plug,
   Search,
+  Send,
   Sparkles,
   Target,
   User,
@@ -44,23 +45,34 @@ interface NavItem {
 
 const NAV: { section: string; items: NavItem[] }[] = [
   {
-    section: "Workspace",
+    section: "Overview",
     items: [
-      { label: "Overview", icon: House, to: "/overview" },
-      { label: "Leads", icon: Users, to: "/leads" },
-      { label: "Pipeline", icon: Kanban, to: "/pipeline" },
-      { label: "Campaigns", icon: Target, to: "/campaigns" },
-      { label: "Inbox", icon: Inbox, to: "/inbox" },
-      { label: "Tasks", icon: CalendarClock, to: "/tasks" },
-      { label: "Analytics", icon: BarChart3, to: "/analytics" },
+      { label: "Dashboard", icon: House, to: "/dashboard" },
+      { label: "AI Copilot", icon: Bot, to: "/assistant" },
     ],
   },
   {
-    section: "Tools",
+    section: "Find",
     items: [
-      { label: "AI Assistant", icon: Bot, to: "/assistant" },
-      { label: "Lead Research", icon: Sparkles, to: "/research" },
+      { label: "Leads", icon: Users, to: "/leads" },
+      { label: "Research", icon: Sparkles, to: "/research" },
       { label: "Contacts", icon: LayoutGrid, to: "/contacts" },
+    ],
+  },
+  {
+    section: "Sell",
+    items: [
+      { label: "Outreach", icon: Send, to: "/campaigns" },
+      { label: "Inbox", icon: Inbox, to: "/inbox" },
+      { label: "Campaigns", icon: Target, to: "/campaigns" },
+      { label: "Pipeline", icon: Kanban, to: "/pipeline" },
+    ],
+  },
+  {
+    section: "Operate",
+    items: [
+      { label: "Tasks", icon: CalendarClock, to: "/tasks" },
+      { label: "Analytics", icon: BarChart3, to: "/analytics" },
       { label: "Templates", icon: BookMarked, to: "/templates" },
       { label: "Integrations", icon: Plug, to: "/integrations" },
     ],
@@ -69,7 +81,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
 
 // Bottom navigation for mobile — the five most-used destinations.
 const MOBILE_NAV: NavItem[] = [
-  { label: "Overview", icon: House, to: "/overview" },
+  { label: "Home", icon: House, to: "/dashboard" },
   { label: "Leads", icon: Users, to: "/leads" },
   { label: "Pipeline", icon: Kanban, to: "/pipeline" },
   { label: "Inbox", icon: Inbox, to: "/inbox" },
@@ -159,8 +171,8 @@ function UserMenu() {
             <span className="block truncate font-normal text-muted-foreground">{email}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => navigate("/contacts")}>
-            <User className="size-3.5" /> Workspace
+          <DropdownMenuItem onClick={() => navigate("/dashboard")}>
+            <User className="size-3.5" /> Dashboard
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => navigate("/integrations")}>
             <Plug className="size-3.5" /> Settings & integrations

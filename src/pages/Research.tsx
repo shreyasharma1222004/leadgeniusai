@@ -104,7 +104,7 @@ export default function ResearchPage() {
                 Find your next 6 prospects.
               </h2>
               <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                DealFlow AI suggests prospect archetypes weighted toward your existing pipeline
+                Dealflow AI suggests prospect archetypes weighted toward your existing pipeline
                 industries. They're starting points — verify the company, find the real contact, and
                 add them in one click.
               </p>
@@ -166,7 +166,7 @@ export default function ResearchPage() {
             </p>
             <p className="mt-1.5">
               Suggestions are archetype-based starting points derived from your pipeline's industries
-              — not scraped personal data. DealFlow AI never fabricates facts about real companies:
+              — not scraped personal data. Dealflow AI never fabricates facts about real companies:
               verify externally, then add the lead with the details you confirm.
             </p>
           </div>

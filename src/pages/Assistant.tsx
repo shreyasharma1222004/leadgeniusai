@@ -18,11 +18,12 @@ interface Turn {
 }
 
 const SUGGESTIONS = [
-  "Which leads should I focus on today?",
-  "What follow-ups are due?",
-  "Show me a pipeline summary",
+  "What should I work on today?",
+  "Which leads should I follow up with?",
+  "Show me my hottest opportunities",
+  "Which deals are worth the most?",
   "Any stalled leads?",
-  "Any unread replies?",
+  "How much revenue have I won?",
 ];
 
 export default function AssistantPage() {
@@ -62,9 +63,9 @@ export default function AssistantPage() {
   );
 
   return (
-    <AppShell title="AI Assistant">
+    <AppShell title="AI Copilot">
       <p className="-mt-3 mb-4 text-sm text-muted-foreground">
-        Ask about your pipeline — it answers from your real lead data, never invented numbers.
+        Your business copilot — answers from your real workspace data, never invented numbers.
       </p>
 
       {!ready ? (
@@ -85,8 +86,8 @@ export default function AssistantPage() {
                   <p className="text-sm font-semibold">Your pipeline, on demand.</p>
                 </div>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  I read your leads, replies, follow-ups and campaigns — ask me anything about them.
-                  Nothing is sent anywhere: every answer is computed from your own workspace.
+                  I read your leads, deals, replies, follow-ups and campaigns — ask me anything about
+                  them. Every answer is computed from your own workspace.
                 </p>
               </div>
             )}
@@ -103,7 +104,7 @@ export default function AssistantPage() {
                 >
                   {turn.role === "assistant" && (
                     <p className="label-caps mb-1.5 flex items-center gap-1.5 text-muted-foreground">
-                      <Sparkles className="size-3" /> DealFlow AI
+                      <Sparkles className="size-3" /> Dealflow AI
                     </p>
                   )}
                   <p className="whitespace-pre-wrap">{turn.text}</p>

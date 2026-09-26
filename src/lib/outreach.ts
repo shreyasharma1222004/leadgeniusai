@@ -63,7 +63,7 @@ export function draftOutreach(
       "",
       "Open to a short chat this week? No deck, no pitch — just a concrete idea.",
       "",
-      "— Sent from DealFlow AI",
+      "— Sent from Dealflow AI",
     ].join("\n");
     return { subject: "", body };
   }

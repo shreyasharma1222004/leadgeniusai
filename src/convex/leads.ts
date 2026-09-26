@@ -5,13 +5,22 @@ import type { Id } from "./_generated/dataModel";
 
 const LEAD_STATUS_VALUES = [
   "new",
-  "contacted",
-  "replied",
-  "interested",
-  "meeting",
+  "contacted", // legacy value, displayed as Qualified
+  "qualified", // canonical for new writes
+  "discovery",
+  "proposal",
+  "interested", // legacy value, displayed as Negotiation
+  "negotiation", // canonical for new writes
   "won",
   "lost",
 ];
+
+/** One-way normalization: canonical writes, legacy values accepted and mapped. */
+function canonicalStatus(status: string): string {
+  if (status === "qualified") return "contacted";
+  if (status === "negotiation") return "interested";
+  return status;
+}
 
 const LEAD_FIELDS = {
   name: v.string(),
@@ -26,6 +35,13 @@ const LEAD_FIELDS = {
   notes: v.optional(v.string()),
   tags: v.optional(v.array(v.string())),
   source: v.optional(v.string()),
+  // deal CRM + lead intelligence fields (§11, §17)
+  companySize: v.optional(v.string()),
+  revenue: v.optional(v.string()),
+  intent: v.optional(v.string()),
+  dealValue: v.optional(v.number()),
+  probability: v.optional(v.number()),
+  expectedCloseAt: v.optional(v.number()),
 };
 
 async function requireUserId(ctx: MutationCtx) {
@@ -137,12 +153,13 @@ export const setStatus = mutation({
   args: { id: v.id("leads"), status: v.string() },
   handler: async (ctx, { id, status }) => {
     const userId = await requireUserId(ctx);
-    if (!LEAD_STATUS_VALUES.includes(status)) {
+    const canonical = canonicalStatus(status);
+    if (!LEAD_STATUS_VALUES.includes(canonical)) {
       throw new Error("Unknown status.");
     }
     const lead = await ctx.db.get(id);
     if (!lead || lead.userId !== userId) throw new Error("Lead not found.");
-    await ctx.db.patch(id, { status });
+    await ctx.db.patch(id, { status: canonical });
   },
 });
 
@@ -150,13 +167,65 @@ export const bulkSetStatus = mutation({
   args: { ids: v.array(v.id("leads")), status: v.string() },
   handler: async (ctx, { ids, status }) => {
     const userId = await requireUserId(ctx);
-    if (!LEAD_STATUS_VALUES.includes(status)) {
+    const canonical = canonicalStatus(status);
+    if (!LEAD_STATUS_VALUES.includes(canonical)) {
       throw new Error("Unknown status.");
     }
     for (const id of ids) {
       const lead = await ctx.db.get(id);
-      if (lead && lead.userId === userId) await ctx.db.patch(id, { status });
+      if (lead && lead.userId === userId) await ctx.db.patch(id, { status: canonical });
     }
+  },
+});
+
+/** One-time migration: rewrite legacy 'replied'/'meeting' rows into canonical stages. */
+export const migrateStatuses = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUserId(ctx);
+    const legacy = await ctx.db
+      .query("leads")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    let migrated = 0;
+    for (const lead of legacy) {
+      if (lead.status === "replied" || lead.status === "meeting") {
+        await ctx.db.patch(lead._id, {
+          status: lead.status === "replied" ? "discovery" : "proposal",
+        });
+        migrated++;
+      }
+    }
+    return { migrated };
+  },
+});
+
+/** Update the deal-CRM fields of one lead (§17). Partial — strips undefined. */
+export const updateDeal = mutation({
+  args: {
+    id: v.id("leads"),
+    dealValue: v.optional(v.number()),
+    probability: v.optional(v.number()),
+    expectedCloseAt: v.optional(v.number()),
+    companySize: v.optional(v.string()),
+    revenue: v.optional(v.string()),
+    intent: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, ...fields }) => {
+    const userId = await requireUserId(ctx);
+    const lead = await ctx.db.get(id);
+    if (!lead || lead.userId !== userId) throw new Error("Lead not found.");
+    const clean = Object.fromEntries(
+      Object.entries(fields).filter(([, value]) => value !== undefined),
+    );
+    if (clean.probability !== undefined) {
+      const p = clean.probability as number;
+      if (p < 0 || p > 100) throw new Error("Probability must be between 0 and 100.");
+    }
+    if (clean.dealValue !== undefined && (clean.dealValue as number) < 0) {
+      throw new Error("Deal value can't be negative.");
+    }
+    await ctx.db.patch(id, clean);
   },
 });
 
@@ -318,6 +387,7 @@ type SampleLead = {
   lastContactedAt?: number;
   nextFollowUpAt?: number;
   source?: string;
+  dealValue?: number;
 };
 
 export const loadSampleData = mutation({
@@ -374,7 +444,7 @@ export const loadSampleData = mutation({
         location: "London, UK",
         email: "daniel@northstardigital.example",
         website: "northstardigital.example",
-        status: "replied",
+        status: "discovery",
         score: 81,
         summary:
           "Northstar Digital runs performance campaigns for mid-market e-commerce brands and recently picked up three new retail accounts.",
@@ -403,7 +473,7 @@ export const loadSampleData = mutation({
         location: "Bengaluru, IN",
         email: "priya@elevatecommerce.example",
         website: "elevatecommerce.example",
-        status: "meeting",
+        status: "proposal",
         score: 92,
         summary:
           "Elevate Commerce is a D2C marketplace scaling from marketplace listings to its own storefront, with a growing paid-acquisition program.",
@@ -530,6 +600,7 @@ export const loadSampleData = mutation({
         ],
         approach:
           "Closed: repositioned outbound messaging and a case-study program lifted enterprise replies.",
+        dealValue: 18000,
         tags: ["closed-won"],
         lastContactedAt: now - 12 * day,
         source: "Sample data",

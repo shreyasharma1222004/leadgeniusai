@@ -32,3 +32,27 @@ export const updateProfile = mutation({
     await ctx.db.patch(userId, patch);
   },
 });
+
+/** Business profile captured by the onboarding flow (§51). All optional. */
+export const updateBusinessProfile = mutation({
+  args: {
+    businessType: v.optional(v.string()),
+    sells: v.optional(v.string()),
+    audience: v.optional(v.string()),
+    growthGoal: v.optional(v.string()),
+    revenueGoal: v.optional(v.number()),
+    teamSize: v.optional(v.string()),
+    onboarded: v.optional(v.boolean()),
+  },
+  handler: async (ctx, fields) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("You need to sign in to do that.");
+    const { onboarded, ...rest } = fields;
+    const clean = Object.fromEntries(
+      Object.entries(rest).filter(([, value]) => value !== undefined),
+    );
+    const patch = clean as Record<string, unknown>;
+    if (onboarded) patch.onboardedAt = Date.now();
+    await ctx.db.patch(userId, patch);
+  },
+});

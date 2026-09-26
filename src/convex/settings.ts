@@ -56,7 +56,7 @@ export const getSenderProfile = query({
   },
 });
 
-/** Update the From display name used when DealFlow AI sends via Gmail. */
+/** Update the From display name used when Dealflow AI sends via Gmail. */
 export const setSenderName = mutation({
   args: { senderName: v.string() },
   handler: async (ctx, { senderName }) => {

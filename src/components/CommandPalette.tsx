@@ -6,6 +6,7 @@ import {
   BarChart3,
   Bot,
   CalendarClock,
+  House,
   Inbox,
   Kanban,
   Plug,
@@ -57,7 +58,7 @@ export function CommandPalette() {
         </CommandItem>
         <CommandItem onSelect={() => go("/assistant")}>
           <Bot className="size-4 text-muted-foreground" />
-          <span>Ask the AI Assistant</span>
+          <span>Ask the AI Copilot</span>
         </CommandItem>
       </CommandGroup>
       <CommandSeparator />
@@ -71,6 +72,9 @@ export function CommandPalette() {
       </CommandGroup>
       <CommandSeparator />
       <CommandGroup heading="Navigate">
+        <CommandItem onSelect={() => go("/dashboard")}>
+          <House className="size-4" /> Dashboard
+        </CommandItem>
         <CommandItem onSelect={() => go("/leads")}>
           <Users className="size-4" /> Leads
         </CommandItem>

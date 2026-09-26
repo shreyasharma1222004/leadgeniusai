@@ -42,7 +42,7 @@ export default function IntegrationsPage() {
       envVar: "GMAIL_USER + GMAIL_APP_PASSWORD",
       description: gmailActive
         ? `Connected. Your outreach now goes out from your own Gmail address (${delivery?.from ?? ""}) and can reach any recipient on any provider.`
-        : "Connect your own Gmail account and DealFlow AI sends email as you — to anyone, on Gmail, Outlook, Yahoo or company addresses. No domain, no DNS records, nothing to buy.",
+        : "Connect your own Gmail account and Dealflow AI sends email as you — to anyone, on Gmail, Outlook, Yahoo or company addresses. No domain, no DNS records, nothing to buy.",
       how: "Uses Gmail's SMTP with an App Password Google issues for free. Recipients see your name and address, so replies land in your normal inbox.",
     },
     {
@@ -65,7 +65,7 @@ export default function IntegrationsPage() {
     },
     {
       icon: Bot,
-      name: "DealFlow Assistant",
+      name: "Dealflow Copilot",
       status: "live",
       description: "Built in — answers pipeline questions from your workspace data with no external calls.",
       how: "Open AI Assistant in the sidebar. It runs entirely on your Convex data.",
@@ -107,7 +107,7 @@ export default function IntegrationsPage() {
         </div>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
           No domain needed. Google gives every account free App Passwords; one
-          minute of setup and every email you send from DealFlow AI goes out
+          minute of setup and every email you send from Dealflow AI goes out
           from your own address — reaching real prospects on Gmail, Outlook,
           Yahoo and company mailboxes alike.
         </p>
@@ -145,7 +145,7 @@ export default function IntegrationsPage() {
                     >
                       myaccount.google.com/apppasswords
                     </a>
-                    , name it "DealFlow AI", and copy the 16-character password
+                    , name it "Dealflow AI", and copy the 16-character password
                     Google shows you.
                   </>
                 ),
@@ -162,7 +162,7 @@ export default function IntegrationsPage() {
                     <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
                       GMAIL_APP_PASSWORD
                     </code>{" "}
-                    = the 16-character code. DealFlow AI picks them up on the
+                    = the 16-character code. Dealflow AI picks them up on the
                     next send automatically.
                   </>
                 ),
@@ -288,7 +288,7 @@ export default function IntegrationsPage() {
             <>
               While Gmail isn't connected yet, the fastest way to work real
               prospects is Compose → <span className="font-medium text-foreground">Copy message</span> →
-              paste into your Gmail → send manually — DealFlow AI logs the touch
+              paste into your Gmail → send manually — Dealflow AI logs the touch
               either way. Connecting Gmail upgrades that to one-click automated
               sending.
             </>

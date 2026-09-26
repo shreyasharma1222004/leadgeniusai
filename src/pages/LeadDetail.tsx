@@ -19,7 +19,9 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { formatDateTime, initials, timeAgo } from "@/lib/format";
 import { analyzeLead } from "@/lib/leads-client";
-import { useMemo } from "react";
+import { money, nextBestAction } from "@/lib/growth";
+import { defaultProbability, weightedValue } from "@/lib/leadStatus";
+import { useEffect, useMemo } from "react";
 import {
   LEAD_STATUSES,
   LEAD_STATUS_LABELS,
@@ -33,6 +35,7 @@ import {
   ArrowLeft,
   CalendarPlus,
   Check,
+  CircleDollarSign,
   Loader2,
   Mail,
   MapPin,
@@ -75,6 +78,7 @@ export default function LeadDetailPage() {
   const [followUpNote, setFollowUpNote] = useState("");
 
   const setStatus = useMutation(api.leads.setStatus);
+  const updateDeal = useMutation(api.leads.updateDeal);
   const addNote = useMutation(api.leads.addNote);
   const removeLead = useMutation(api.leads.remove);
   const markContacted = useMutation(api.leads.markContacted);
@@ -457,6 +461,23 @@ export default function LeadDetailPage() {
             )}
           </section>
 
+          {/* Next best action — computed from measurable activity (§13) */}
+          <NextBestActionCard
+            lead={lead}
+            onCompose={() => setComposerOpen(true)}
+            onSchedule={() => setFollowUpOpen(true)}
+          />
+
+          {/* Deal block — value, probability, expected close (§17) */}
+          <DealCard lead={lead} onSave={async (fields) => {
+            try {
+              await updateDeal({ id: lead._id, ...fields });
+              toast("Deal details saved");
+            } catch {
+              toast.error("Couldn't save deal details — try again.");
+            }
+          }} />
+
           {/* Message thread */}
           <MessageThread leadId={lead._id} leadName={lead.name} onCompose={() => setComposerOpen(true)} />
 
@@ -707,6 +728,139 @@ function MessageThread({
       )}
     </section>
  );
+}
+
+/** Next Best Action — derived from measurable activity only (§13). */
+function NextBestActionCard({
+  lead,
+  onCompose,
+  onSchedule,
+}: {
+  lead: Lead;
+  onCompose: () => void;
+  onSchedule: () => void;
+}) {
+  const action = nextBestAction(lead);
+  if (!action) return null;
+  return (
+    <section className="rounded-lg border border-[#6f4b5e]/30 bg-[#6f4b5e]/[0.05] p-5">
+      <p className="label-caps text-[#6f4b5e]">Next best action</p>
+      <p className="mt-2 text-sm leading-relaxed">{action.text}</p>
+      <p className="mt-1 text-xs text-muted-foreground">Because: {action.reason}</p>
+      <div className="mt-3 flex gap-2">
+        {action.to === "compose" && (
+          <Button size="sm" onClick={onCompose}>
+            <Send className="size-3.5" /> Compose outreach
+          </Button>
+        )}
+        {action.to === "followup" && (
+          <Button size="sm" onClick={onSchedule}>
+            <CalendarPlus className="size-3.5" /> Schedule follow-up
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Deal CRM block — value, probability, expected close (§17). */
+function DealCard({
+  lead,
+  onSave,
+}: {
+  lead: Lead;
+  onSave: (fields: {
+    dealValue?: number;
+    probability?: number;
+    expectedCloseAt?: number;
+  }) => Promise<void>;
+}) {
+  const [value, setValue] = useState(lead.dealValue?.toString() ?? "");
+  const [probability, setProbability] = useState(lead.probability?.toString() ?? "");
+  const [closeDate, setCloseDate] = useState(
+    lead.expectedCloseAt ? new Date(lead.expectedCloseAt).toISOString().slice(0, 10) : "",
+  );
+  const [saving, setSaving] = useState(false);
+
+  // Keep the draft in sync if the record changes underneath us.
+  useEffect(() => {
+    setValue(lead.dealValue?.toString() ?? "");
+    setProbability(lead.probability?.toString() ?? "");
+    setCloseDate(lead.expectedCloseAt ? new Date(lead.expectedCloseAt).toISOString().slice(0, 10) : "");
+  }, [lead.dealValue, lead.probability, lead.expectedCloseAt]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave({
+        dealValue: value.trim() ? Number(value.replace(/[^0-9.]/g, "")) || undefined : undefined,
+        probability: probability.trim() ? Number(probability.replace(/[^0-9.]/g, "")) || undefined : undefined,
+        expectedCloseAt: closeDate ? new Date(closeDate).getTime() : undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const weighted = weightedValue(
+    lead.dealValue,
+    lead.probability,
+    lead.status,
+  );
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <CircleDollarSign className="size-4 text-muted-foreground" /> Deal
+        </h2>
+        <span className="text-[11px] text-muted-foreground">
+          default {defaultProbability(lead.status)}% for {statusLabel(lead.status)} stage
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
+        <div className="grid gap-1">
+          <Label htmlFor="deal-value" className="text-xs">Deal value ($)</Label>
+          <Input
+            id="deal-value"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            inputMode="numeric"
+            placeholder="12,000"
+          />
+        </div>
+        <div className="grid gap-1">
+          <Label htmlFor="deal-probability" className="text-xs">Probability %</Label>
+          <Input
+            id="deal-probability"
+            value={probability}
+            onChange={(e) => setProbability(e.target.value)}
+            inputMode="numeric"
+            placeholder={`${defaultProbability(lead.status)}`}
+          />
+        </div>
+        <div className="grid gap-1">
+          <Label htmlFor="deal-close" className="text-xs">Expected close</Label>
+          <Input
+            id="deal-close"
+            type="date"
+            value={closeDate}
+            onChange={(e) => setCloseDate(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          {lead.dealValue !== undefined
+            ? `Weighted value ${money(weighted)} (value × probability) — an estimate, not a forecast promise.`
+            : "Set a value so this deal counts toward pipeline and revenue."}
+        </p>
+        <Button size="sm" className="h-7 text-xs" onClick={() => void save()} disabled={saving}>
+          {saving ? <Loader2 className="size-3 animate-spin" /> : "Save"}
+        </Button>
+      </div>
+    </section>
+  );
 }
 
 /** Inline-editable email so leads imported without one (or sample data)
