@@ -18,6 +18,7 @@ import {
   ArrowRight,
   CornerDownLeft,
   Inbox as InboxIcon,
+  Info,
   Mail,
   Send,
   Sparkles,
@@ -92,6 +93,18 @@ export default function InboxPage() {
       <p className="-mt-3 mb-4 text-sm text-muted-foreground">
         Every message you've sent or received — outreach history across all leads.
       </p>
+
+      {/* Manual-logging notice (production hardening §7): no Gmail/Outlook sync. */}
+      <div
+        role="note"
+        className="mb-4 flex items-start gap-2 rounded-md border border-[#a06b3c]/35 bg-[#a06b3c]/[0.08] px-3 py-2.5 text-xs leading-relaxed text-[#82552e]"
+      >
+        <Info className="mt-0.5 size-3.5 shrink-0" />
+        <p>
+          Incoming replies are currently logged manually. Gmail/Outlook inbox synchronization is
+          not connected.
+        </p>
+      </div>
 
       <div className="mb-4 flex items-center rounded-md border border-border bg-card p-0.5" style={{ width: "fit-content" }}>
         {(["all", "sent", "received"] as const).map((key) => (
@@ -240,7 +253,8 @@ export default function InboxPage() {
             <DialogTitle>Log the reply</DialogTitle>
             <DialogDescription>
               Paste or summarize what {leadById.get(replyFor?.leadId ?? "")?.name ?? "the lead"} said.
-              It becomes part of the thread and marks them as replied.
+              It becomes part of the thread and moves the lead into Discovery if they haven't
+              progressed further. Log replies yourself — inbox sync is not connected.
             </DialogDescription>
           </DialogHeader>
           <Textarea

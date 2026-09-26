@@ -1,12 +1,58 @@
 import type { Doc } from "@/convex/_generated/dataModel";
 import { timeAgo } from "@/lib/format";
 import {
+  LEAD_STATUSES,
   LEAD_STATUS_LABELS,
   PIPELINE_VALUE_STATUSES,
+  REPLIED_STATUSES,
+  canonicalStatus,
   defaultProbability,
   isQualified,
+  statusLabel,
   weightedValue,
 } from "@/lib/leadStatus";
+
+/**
+ * ── Metric definitions (single source of truth — production hardening §8) ──
+ *
+ * Every business metric in the app is computed HERE and only here. Counts,
+ * rates, and money are kept strictly apart:
+ *
+ *   totalLeads            COUNT of every lead in the workspace
+ *   newThisWeek           COUNT of leads created in the last 7 days
+ *   qualified             COUNT whose canonical stage is Qualified or beyond
+ *                         (contacted, discovery, proposal, interested, won)
+ *   activeOpportunities   COUNT of open leads in a value stage
+ *                         (discovery, proposal, interested)
+ *   pipelineValue         MONEY: sum of dealValue on active opportunities
+ *                         (raw, unweighted)
+ *   weightedPipeline      MONEY ESTIMATE: Σ dealValue × probability ÷ 100
+ *                         over active opportunities — a FORECAST, explicitly
+ *                         an estimate based on the pipeline data available,
+ *                         never a committed figure
+ *   wonRevenue            MONEY: sum of dealValue on won deals
+ *   lostValue             MONEY: sum of dealValue on lost deals
+ *   wonCount              COUNT of won deals
+ *   conversionRate        RATE: wonCount ÷ totalLeads (all-time, %)
+ *   winRate (Analytics)   RATE: won ÷ (won + lost) — closed deals only (%)
+ *   responseRate          RATE: received messages ÷ sent messages (%)
+ *   replyRate (Analytics) RATE: leads whose canonical stage counts as replied
+ *                         (discovery, proposal, interested, won — see
+ *                         REPLIED_STATUSES) ÷ totalLeads (%). Stage-based;
+ *                         legacy "replied" values are canonicalized first.
+ *   meetingsBooked        COUNT of leads at Proposal or beyond
+ *                         (proposal, interested, won). Pre-2025-09 the app
+ *                         had a separate "meeting" stage; it is now Proposal.
+ *   meetingRate           RATE: meetingsBooked ÷ totalLeads (%)
+ *   proposalsOut          COUNT of leads at the Proposal stage
+ *   avgDealSize           MONEY: wonRevenue ÷ won deals that have a value
+ *   avgScore              SCORE: mean AI/heuristic lead score (0–100)
+ *
+ * Anything labeled "weighted" or "forecast" in the UI derives from
+ * weightedPipeline and is an estimate. Dashboard and Analytics pages both
+ * consume these functions, so a metric can never disagree with itself across
+ * pages. (The former src/lib/analytics.ts was merged into this file.)
+ */
 
 type Lead = Doc<"leads">;
 type Message = Doc<"messages">;
@@ -55,10 +101,12 @@ export function computeGrowthMetrics(
   const endOfDay = new Date();
   endOfDay.setHours(23, 59, 59, 999);
 
-  const open = leads.filter((l) => !["won", "lost"].includes(l.status));
-  const inPipeline = leads.filter((l) => PIPELINE_VALUE_STATUSES.includes(l.status));
-  const won = leads.filter((l) => l.status === "won");
-  const lost = leads.filter((l) => l.status === "lost");
+  const open = leads.filter((l) => !["won", "lost"].includes(canonicalStatus(l.status)));
+  const inPipeline = leads.filter((l) =>
+    PIPELINE_VALUE_STATUSES.includes(canonicalStatus(l.status)),
+  );
+  const won = leads.filter((l) => canonicalStatus(l.status) === "won");
+  const lost = leads.filter((l) => canonicalStatus(l.status) === "lost");
 
   const pipelineValue = inPipeline.reduce((s, l) => s + (l.dealValue ?? 0), 0);
   const weightedPipeline = inPipeline.reduce(
@@ -86,14 +134,16 @@ export function computeGrowthMetrics(
     avgDealSize: valuedWon.length
       ? Math.round(wonRevenue / valuedWon.length)
       : null,
-    meetingsBooked: leads.filter((l) => ["proposal", "interested", "won"].includes(l.status)).length,
+    meetingsBooked: leads
+      .filter((l) => ["proposal", "interested", "won"].includes(canonicalStatus(l.status)))
+      .length,
     overdueFollowUps: followUps.filter((f) => f.status === "pending" && f.dueAt < now).length,
     dueTodayFollowUps: followUps.filter(
       (f) => f.status === "pending" && f.dueAt >= now && f.dueAt <= endOfDay.getTime(),
     ).length,
     unreadReplies: messages.filter((m) => m.direction === "received" && !m.readAt).length,
     activeCampaigns: campaigns.filter((c) => c.status === "active").length,
-    proposalsOut: leads.filter((l) => l.status === "proposal").length,
+    proposalsOut: leads.filter((l) => canonicalStatus(l.status) === "proposal").length,
   };
 }
 
@@ -137,7 +187,7 @@ export function computeGrowthBrief(
   }
 
   // Highest-value open opportunity, by actual deal value then score
-  const open = leads.filter((l) => !["won", "lost"].includes(l.status));
+  const open = leads.filter((l) => !["won", "lost"].includes(canonicalStatus(l.status)));
   const top = [...open].sort(
     (a, b) => (b.dealValue ?? 0) - (a.dealValue ?? 0) || (b.score ?? 0) - (a.score ?? 0),
   )[0];
@@ -196,7 +246,7 @@ export function computeOpportunities(
 ): GrowthOpportunity[] {
   const out: GrowthOpportunity[] = [];
   const now = Date.now();
-  const open = leads.filter((l) => !["won", "lost"].includes(l.status));
+  const open = leads.filter((l) => !["won", "lost"].includes(canonicalStatus(l.status)));
 
   // 1. Qualified leads never contacted
   const neverContacted = open.filter(
@@ -232,7 +282,10 @@ export function computeOpportunities(
 
   // 3. Stale proposals
   const staleProposals = open.filter(
-    (l) => l.status === "proposal" && l.lastContactedAt !== undefined && now - l.lastContactedAt > 4 * DAY,
+    (l) =>
+      canonicalStatus(l.status) === "proposal" &&
+      l.lastContactedAt !== undefined &&
+      now - l.lastContactedAt > 4 * DAY,
   );
   if (staleProposals.length > 0) {
     out.push({
@@ -435,7 +488,109 @@ export function dealHealth(lead: Lead, followUpCount: number): { state: DealHeal
 }
 
 // ── Shared label helper ──────────────────────────────────────────────────────
+// Canonicalization-aware label helper. Prefer statusLabel() from
+// src/lib/leadStatus.ts, which does the same thing for plain status strings.
 
 export function statusLabelOf(status: string): string {
-  return LEAD_STATUS_LABELS[status as keyof typeof LEAD_STATUS_LABELS] ?? status;
+  return statusLabel(canonicalStatus(status));
+}
+
+// ── Page-level analytics (former src/lib/analytics.ts, merged §8) ───────────
+// Consumed by the Analytics page. All metrics derive from the same
+// canonical-stage helpers used by computeGrowthMetrics above, so Dashboard
+// and Analytics can never disagree about replies, meetings, or win rates.
+
+export interface FunnelStage {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface Analytics {
+  total: number;
+  funnel: FunnelStage[];
+  contactRate: number;
+  replyRate: number;
+  meetingRate: number;
+  winRate: number;
+  won: number;
+  lost: number;
+  avgScore: number | null;
+  activeCampaigns: number;
+  messagesSent: number;
+  repliesReceived: number;
+  followUpsDue: number;
+  topIndustries: { name: string; count: number }[];
+}
+
+export function computeAnalytics(
+  leads: Lead[],
+  messages: Message[],
+  campaigns: { status: string }[],
+  followUps: { status: string; dueAt: number }[],
+): Analytics {
+  const total = leads.length;
+
+  // Contacted = ever actually touched: a recorded lastContactedAt OR a stage
+  // that only exists after a touch (Qualified and beyond).
+  const contacted = leads.filter(
+    (l) => l.lastContactedAt !== undefined || isQualified(l.status),
+  ).length;
+
+  // Stage-based replied count on canonical stages (legacy values mapped).
+  const replied = leads
+    .filter((l) => REPLIED_STATUSES.includes(canonicalStatus(l.status)))
+    .length;
+  const meetings = leads
+    .filter((l) => ["proposal", "interested", "won"].includes(canonicalStatus(l.status)))
+    .length;
+  const won = leads.filter((l) => canonicalStatus(l.status) === "won").length;
+  const lost = leads.filter((l) => canonicalStatus(l.status) === "lost").length;
+
+  const scored = leads.filter((l) => l.score !== undefined);
+  const avgScore =
+    scored.length > 0
+      ? Math.round(scored.reduce((sum, l) => sum + (l.score ?? 0), 0) / scored.length)
+      : null;
+
+  // Funnel over canonical stages, grouping legacy rows into their mapped
+  // column so every lead appears exactly once.
+  const funnel: FunnelStage[] = LEAD_STATUSES.map((s) => ({
+    key: s,
+    label: LEAD_STATUS_LABELS[s],
+    count: leads.filter((l) => canonicalStatus(l.status) === s).length,
+  }));
+
+  const messagesSent = messages.filter((m) => m.direction === "sent").length;
+  const repliesReceived = messages.filter((m) => m.direction === "received").length;
+
+  return {
+    total,
+    funnel,
+    contactRate: total ? Math.round((contacted / total) * 100) : 0,
+    replyRate: total ? Math.round((replied / total) * 100) : 0,
+    meetingRate: total ? Math.round((meetings / total) * 100) : 0,
+    winRate: won + lost > 0 ? Math.round((won / (won + lost)) * 100) : 0,
+    won,
+    lost,
+    avgScore,
+    activeCampaigns: campaigns.filter((c) => c.status === "active").length,
+    messagesSent,
+    repliesReceived,
+    followUpsDue: followUps.filter(
+      (f) => f.status === "pending" && f.dueAt <= Date.now() + 24 * 3600_000,
+    ).length,
+    topIndustries: Object.entries(
+      leads.reduce<Record<string, number>>((acc, lead) => {
+        if (lead.industry) {
+          const key = lead.industry.trim();
+          acc[key] = (acc[key] ?? 0) + 1;
+        }
+        return acc;
+      }, {}),
+    )
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, count })),
+  };
 }

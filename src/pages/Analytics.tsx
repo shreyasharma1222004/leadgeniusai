@@ -2,7 +2,10 @@ import { AppShell } from "@/components/AppShell";
 import { TiltCard } from "@/components/spatial";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
-import { computeAnalytics } from "@/lib/analytics";
+// Single source of truth for metrics (production hardening §8): the former
+// src/lib/analytics.ts was merged into src/lib/growth.ts, which the Dashboard
+// also uses — both pages now share identical metric definitions.
+import { computeAnalytics } from "@/lib/growth";
 import { downloadTextFile, leadsToCsv } from "@/lib/outreach";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "convex/react";
@@ -46,8 +49,8 @@ export default function AnalyticsPage() {
   const metrics = [
     { label: "Contact rate", value: `${a.contactRate}%`, hint: `${leads.filter((l) => l.lastContactedAt).length} of ${a.total} leads contacted` },
     { label: "Reply rate", value: `${a.replyRate}%`, hint: `${a.repliesReceived} replies logged` },
-    { label: "Meeting rate", value: `${a.meetingRate}%`, hint: "replied → meeting or better" },
-    { label: "Win rate", value: a.won + a.lost > 0 ? `${a.winRate}%` : "—", hint: `${a.won} won · ${a.lost} lost` },
+    { label: "Meeting rate", value: `${a.meetingRate}%`, hint: "proposal or better · estimates" },
+    { label: "Win rate", value: a.won + a.lost > 0 ? `${a.winRate}%` : "—", hint: `closed deals only · ${a.won} won · ${a.lost} lost` },
   ];
 
   const maxFunnel = Math.max(1, ...a.funnel.map((f) => f.count));
