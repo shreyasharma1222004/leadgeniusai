@@ -1,0 +1,17 @@
+{
+  "name": "DealFlow AI — AI Sales Assistant",
+  "short_name": "DealFlow AI",
+  "description": "Find leads, research prospects, generate personalized outreach, and manage your pipeline with AI.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0B0D",
+  "theme_color": "#0B0B0D",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
