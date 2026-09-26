@@ -189,7 +189,7 @@ export default function LeadsPage() {
                 className={cn(
                   "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
                   quickFilter === t.key
-                    ? "bg-[#191713] text-[#f7f3ea]"
+                    ? "bg-[#171613] text-[#f5f0e6]"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -225,7 +225,7 @@ export default function LeadsPage() {
 
         {/* Bulk bar — action surface */}
         {selected.size > 0 && (
-          <div className="stage-enter flex flex-wrap items-center gap-2 rounded-lg border border-[#191713]/25 bg-[#ece6d8] px-3 py-2">
+          <div className="stage-enter flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
             <span className="text-xs font-medium">
               {selected.size} selected
             </span>
@@ -328,7 +328,7 @@ export default function LeadsPage() {
                   <TableRow
                     key={lead._id}
                     onClick={() => setPanelLead(lead)}
-                    className="group cursor-pointer border-border/60 transition-colors hover:bg-[#f7f3ea]"
+                    className="group cursor-pointer border-border/60 transition-colors hover:bg-[#f5f0e6]"
                   >
                     <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
@@ -341,7 +341,7 @@ export default function LeadsPage() {
                       <span className="flex items-center gap-2.5">
                         <span
                           aria-hidden
-                          className="flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-[10px] font-semibold text-muted-foreground transition-colors duration-200 group-hover:border-[#191713]/40 group-hover:text-foreground"
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-[10px] font-semibold text-muted-foreground transition-colors duration-200 group-hover:border-[#6f4b5e]/50 group-hover:text-[#6f4b5e]"
                         >
                           {initials(lead.name)}
                         </span>
@@ -393,15 +393,15 @@ export default function LeadsPage() {
                           >
                             {lead.score}
                           </span>
-                          <span className="h-0.5 w-10 overflow-hidden rounded-full bg-[#e4dcc9]">
+                          <span className="h-0.5 w-10 overflow-hidden rounded-full bg-[#e4ddcf]">
                             <span
                               className={cn(
                                 "block h-full rounded-full",
                                 lead.score >= 70
-                                  ? "bg-[#191713]"
+                                  ? "bg-[#6f4b5e]"
                                   : lead.score >= 40
-                                    ? "bg-[#8a7d63]"
-                                    : "bg-[#c9bfa6]",
+                                    ? "bg-[#a06b3c]/70"
+                                    : "bg-border",
                               )}
                               style={{ width: `${lead.score}%` }}
                             />
@@ -413,7 +413,7 @@ export default function LeadsPage() {
                             e.stopPropagation();
                             mutationHelpers.analyze(lead);
                           }}
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-foreground underline underline-offset-2 transition-colors hover:bg-secondary"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-[#6f4b5e] underline underline-offset-2 transition-colors hover:bg-[#6f4b5e]/10"
                         >
                           <Sparkles className="size-3" /> Analyze
                         </button>
@@ -586,9 +586,9 @@ function MetricsHero({ leads, followUpDue }: { leads: Doc2[]; followUpDue: numbe
           <p className="tabular mt-3 text-2xl font-semibold tracking-tight">
             {card.value}
           </p>
-          <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-[#e4dcc9]">
+          <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-[#e4ddcf]">
             <motion.div
-              className="h-full rounded-full bg-[#191713]"
+              className="h-full rounded-full bg-[#6f4b5e]"
               initial={{ width: 0 }}
               animate={{ width: `${card.pct}%` }}
               transition={{ ...SPRING_SOFT, delay: 0.1 + i * 0.06 }}

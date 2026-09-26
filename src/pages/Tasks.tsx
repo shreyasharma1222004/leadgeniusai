@@ -78,7 +78,7 @@ export default function TasksPage() {
               className={cn(
                 "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
                 filter === chip.key
-                  ? "bg-[#191713] text-[#f7f3ea]"
+                  ? "bg-[#171613] text-[#f5f0e6]"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -106,7 +106,7 @@ export default function TasksPage() {
               <div
                 key={f._id}
                 className={cn(
-                  "flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:border-[#b9ae93]",
+                  "flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:border-[#b3a894]",
                   overdue ? "border-destructive/40" : "border-border",
                 )}
               >
@@ -115,12 +115,12 @@ export default function TasksPage() {
                   className={cn(
                     "size-2 shrink-0 rounded-full",
                     f.status === "done"
-                      ? "bg-[#191713]"
+                      ? "bg-[#171613]"
                       : overdue
                         ? "bg-destructive"
                         : f.status === "skipped"
                           ? "bg-border"
-                          : "bg-[#8a7d63]",
+                          : "bg-[#9a9285]",
                   )}
                 />
                 <div className="min-w-0 flex-1">

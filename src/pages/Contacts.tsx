@@ -82,7 +82,7 @@ export default function ContactsPage() {
             >
               <span
                 aria-hidden
-                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-xs font-semibold text-muted-foreground transition-colors duration-200 group-hover:border-[#191713]/40 group-hover:text-foreground"
+                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-xs font-semibold text-muted-foreground transition-colors duration-200 group-hover:border-[#171613]/40 group-hover:text-foreground"
               >
                 {initials(lead.name)}
               </span>

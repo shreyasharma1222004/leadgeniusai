@@ -130,7 +130,7 @@ export function LeadSidePanel({
               <ul className="space-y-1.5">
                 {shown.painPoints.map((p) => (
                   <li key={p} className="flex gap-2 text-sm">
-                    <span className="mt-2 size-1 shrink-0 rounded-full bg-[#8a7d63]" />
+                    <span className="mt-2 size-1 shrink-0 rounded-full bg-[#9a9285]" />
                     {p}
                   </li>
                 ))}

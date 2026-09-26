@@ -58,7 +58,13 @@ export default function PipelinePage() {
     if (!lead || lead.status === status) return;
     try {
       await bulkSetStatus({ ids: [dragId], status });
-      toast(`${lead.name} → ${LEAD_STATUS_LABELS[status as keyof typeof LEAD_STATUS_LABELS] ?? status}`);
+      if (status === "won") {
+        toast.success("✓ Deal closed", {
+          description: `Nice — ${lead.name} moved to Won.`,
+        });
+      } else {
+        toast(`${lead.name} → ${LEAD_STATUS_LABELS[status as keyof typeof LEAD_STATUS_LABELS] ?? status}`);
+      }
     } catch {
       toast.error("Couldn't move that card — try again.");
     }
@@ -87,7 +93,7 @@ export default function PipelinePage() {
               className={cn(
                 "flex w-64 shrink-0 flex-col rounded-xl border transition-all duration-200",
                 isOver
-                  ? "border-[#191713]/50 bg-[#ece6d8]"
+                  ? "border-[#171613]/50 bg-[#e4ddcf]"
                   : isDragging
                     ? "border-border bg-sidebar/60"
                     : "border-border bg-sidebar/80",
@@ -138,8 +144,8 @@ export default function PipelinePage() {
                         : undefined
                     }
                     className={cn(
-                      "relative cursor-grab rounded-lg border border-border bg-card p-3 shadow-sm transition-colors hover:border-[#b9ae93] active:cursor-grabbing",
-                      dragId === lead._id && "border-[#191713]/50",
+                      "relative cursor-grab rounded-lg border border-border bg-card p-3 shadow-sm transition-colors hover:border-[#b3a894] active:cursor-grabbing",
+                      dragId === lead._id && "border-[#171613]/50",
                     )}
                   >
                     <Link to={`/leads/${lead._id}`} className="block" draggable={false}>
@@ -158,9 +164,9 @@ export default function PipelinePage() {
                         )}
                       </div>
                       {lead.score !== undefined && (
-                        <span className="mt-2 block h-0.5 overflow-hidden rounded-full bg-[#e4dcc9]">
+                        <span className="mt-2 block h-0.5 overflow-hidden rounded-full bg-[#e4ddcf]">
                           <motion.span
-                            className="block h-full rounded-full bg-[#191713]"
+                            className="block h-full rounded-full bg-[#171613]"
                             initial={{ width: 0 }}
                             animate={{ width: `${lead.score}%` }}
                             transition={{ ...SPRING, delay: 0.1 }}

@@ -103,7 +103,7 @@ export default function InboxPage() {
             className={cn(
               "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium capitalize transition-colors",
               filter === key
-                ? "bg-[#191713] text-[#f7f3ea]"
+                ? "bg-[#171613] text-[#f5f0e6]"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -137,8 +137,8 @@ export default function InboxPage() {
               <div
                 key={m._id}
                 className={cn(
-                  "rounded-lg border bg-card px-4 py-3 transition-colors hover:border-[#b9ae93]",
-                  unreadMsg ? "border-[#191713]/40 bg-[#f7f3ea]" : "border-border",
+                  "rounded-lg border bg-card px-4 py-3 transition-colors hover:border-[#b3a894]",
+                  unreadMsg ? "border-[#171613]/40 bg-[#f5f0e6]" : "border-border",
                 )}
               >
                 <div className="flex flex-wrap items-center gap-2">
@@ -148,7 +148,7 @@ export default function InboxPage() {
                       "flex size-6 shrink-0 items-center justify-center rounded-full",
                       m.direction === "sent"
                         ? "border border-border bg-secondary text-muted-foreground"
-                        : "border border-[#191713]/30 bg-[#191713] text-[#f7f3ea]",
+                        : "border border-[#171613]/30 bg-[#171613] text-[#f5f0e6]",
                     )}
                   >
                     {m.direction === "sent" ? <Send className="size-3" /> : <CornerDownLeft className="size-3" />}

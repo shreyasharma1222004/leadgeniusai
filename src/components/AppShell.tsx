@@ -13,13 +13,11 @@ import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import { useQuery } from "convex/react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import logo from "@/assets/logo.svg";
 import {
   BarChart3,
   Bell,
   Bot,
   CalendarClock,
-  ChevronLeft,
   Inbox,
   Kanban,
   LayoutGrid,
@@ -32,11 +30,11 @@ import {
   User,
   Users,
   BookMarked,
+  House,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { CommandPalette } from "@/components/CommandPalette";
-import { AmbientLayer } from "@/components/AmbientLayer";
 
 interface NavItem {
   label: string;
@@ -48,24 +46,20 @@ const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Workspace",
     items: [
+      { label: "Overview", icon: House, to: "/overview" },
       { label: "Leads", icon: Users, to: "/leads" },
       { label: "Pipeline", icon: Kanban, to: "/pipeline" },
       { label: "Campaigns", icon: Target, to: "/campaigns" },
       { label: "Inbox", icon: Inbox, to: "/inbox" },
       { label: "Tasks", icon: CalendarClock, to: "/tasks" },
-    ],
-  },
-  {
-    section: "Intelligence",
-    items: [
-      { label: "AI Assistant", icon: Bot, to: "/assistant" },
-      { label: "Lead Research", icon: Sparkles, to: "/research" },
       { label: "Analytics", icon: BarChart3, to: "/analytics" },
     ],
   },
   {
-    section: "Management",
+    section: "Tools",
     items: [
+      { label: "AI Assistant", icon: Bot, to: "/assistant" },
+      { label: "Lead Research", icon: Sparkles, to: "/research" },
       { label: "Contacts", icon: LayoutGrid, to: "/contacts" },
       { label: "Templates", icon: BookMarked, to: "/templates" },
       { label: "Integrations", icon: Plug, to: "/integrations" },
@@ -73,23 +67,23 @@ const NAV: { section: string; items: NavItem[] }[] = [
   },
 ];
 
-function NavList({
-  collapsed,
-  onNavigate,
-}: {
-  collapsed: boolean;
-  onNavigate?: () => void;
-}) {
+// Bottom navigation for mobile — the five most-used destinations.
+const MOBILE_NAV: NavItem[] = [
+  { label: "Overview", icon: House, to: "/overview" },
+  { label: "Leads", icon: Users, to: "/leads" },
+  { label: "Pipeline", icon: Kanban, to: "/pipeline" },
+  { label: "Inbox", icon: Inbox, to: "/inbox" },
+  { label: "Tasks", icon: CalendarClock, to: "/tasks" },
+];
+
+function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const reduced = useReducedMotion();
   return (
     <nav aria-label="Primary" className="flex flex-col gap-6 px-3">
       {NAV.map((group) => (
         <div key={group.section}>
-          {!collapsed && (
-            <p className="label-caps text-muted-foreground/60 px-2 pb-2">{group.section}</p>
-          )}
-          {collapsed && <div className="mx-2 mb-2 h-px bg-border" />}
-          <ul className="flex flex-col gap-1">
+          <p className="label-caps px-2 pb-2 text-[#f5f0e6]/35">{group.section}</p>
+          <ul className="flex flex-col gap-0.5">
             {group.items.map((item) => {
               const Icon = item.icon;
               return (
@@ -99,31 +93,29 @@ function NavList({
                     onClick={onNavigate}
                     className={({ isActive }) =>
                       cn(
-                        "group relative flex items-center gap-2.5 rounded-lg border border-transparent px-2.5 py-2 text-sm transition-all",
-                        collapsed && "justify-center px-0",
+                        "group relative flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
                         isActive
-                          ? "nav-pill-active font-medium"
-                          : "text-muted-foreground hover:border-border hover:bg-secondary hover:text-foreground",
+                          ? "bg-[#1e1d19] font-medium text-[#f5f0e6]"
+                          : "text-[#f5f0e6]/55 hover:bg-[#1e1d19]/60 hover:text-[#f5f0e6]",
                       )
                     }
                   >
                     {({ isActive }) => (
                       <>
-                        <motion.span
-                          whileHover={reduced ? undefined : { x: 1.5 }}
-                          transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                          className="flex shrink-0"
-                        >
-                          <Icon className={cn("size-4", isActive && "text-[#f7f3ea]")} />
-                        </motion.span>
-                        {!collapsed && <span className="truncate">{item.label}</span>}
                         {isActive && (
                           <motion.span
-                            layoutId="nav-underline"
-                            className="absolute -left-3 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#191713]"
-                            transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                            layoutId="nav-indicator"
+                            transition={
+                              reduced
+                                ? { duration: 0 }
+                                : { type: "spring", stiffness: 380, damping: 32 }
+                            }
+                            aria-hidden
+                            className="absolute -left-3 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-[#a06b3c]"
                           />
                         )}
+                        <Icon className="size-4 shrink-0" />
+                        <span className="truncate">{item.label}</span>
                       </>
                     )}
                   </NavLink>
@@ -137,7 +129,7 @@ function NavList({
   );
 }
 
-function UserMenu({ collapsed }: { collapsed: boolean }) {
+function UserMenu() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const name = user?.name ?? "Guest";
@@ -145,25 +137,20 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
   const initial = name.slice(0, 1).toUpperCase();
 
   return (
-    <div className={cn("border-t border-border px-3 py-3", collapsed && "flex justify-center px-0")}>
+    <div className="border-t border-[#f5f0e6]/8 px-3 py-3">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className={cn(
-              "group flex w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent p-1.5 transition-all hover:border-border hover:bg-secondary",
-              collapsed && "w-auto",
-            )}
+            className="group flex w-full cursor-pointer items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-[#1e1d19]"
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-[#191713] text-[11px] font-semibold text-[#f7f3ea]">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-[#f5f0e6]/15 bg-[#1e1d19] text-[11px] font-semibold text-[#f5f0e6]">
               {initial}
             </span>
-            {!collapsed && (
-              <span className="min-w-0 flex-1 text-left leading-tight">
-                <span className="block truncate text-xs font-medium">{name}</span>
-                <span className="block truncate text-[11px] text-muted-foreground">{email}</span>
-              </span>
-            )}
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate text-xs font-medium text-[#f5f0e6]">{name}</span>
+              <span className="block truncate text-[11px] text-[#f5f0e6]/45">{email}</span>
+            </span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="start" className="depth-pop w-52">
@@ -213,18 +200,18 @@ function NotificationsButton() {
         <button
           type="button"
           aria-label="Notifications"
-          className="relative flex size-8 cursor-pointer items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border hover:bg-secondary hover:text-foreground"
+          className="relative flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
         >
           <Bell className="size-4" />
           {count > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-[#191713] text-[9px] font-semibold text-[#f7f3ea]">
+            <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-[#6f4b5e] text-[9px] font-semibold text-[#f5f0e6]">
               {count > 9 ? "9+" : count}
             </span>
           )}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="depth-pop w-80">
-        <p className="label-caps px-3 pb-1 pt-2 text-muted-foreground/70">Today</p>
+        <p className="label-caps px-3 pb-1 pt-2 text-muted-foreground">Today</p>
         {unread.slice(0, 3).map((m) => (
           <DropdownMenuItem
             key={m._id}
@@ -234,9 +221,9 @@ function NotificationsButton() {
             }}
             className="cursor-pointer gap-2"
           >
-            <span className="size-1.5 shrink-0 rounded-full bg-[#191713]" />
+            <span className="size-1.5 shrink-0 rounded-full bg-[#6f4b5e]" />
             <span className="truncate text-xs">
-              <span className="font-medium">{leadName(m.leadId)}</span> replied to your message
+              <span className="font-medium">{leadName(m.leadId)}</span> replied
             </span>
           </DropdownMenuItem>
         ))}
@@ -257,7 +244,7 @@ function NotificationsButton() {
         ))}
         {count === 0 && (
           <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-            All clear — nothing needs your attention.
+            You're clear for today.
           </p>
         )}
       </DropdownMenuContent>
@@ -286,7 +273,7 @@ function ExpandableSearch() {
       layout
       transition={{ type: "spring", stiffness: 320, damping: 30 }}
       className={cn(
-        "flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 transition-colors focus-within:border-[#191713]/50",
+        "flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 transition-colors focus-within:border-[#6f4b5e]/60",
         expanded ? "w-64" : "w-36 cursor-pointer",
       )}
       onClick={() => !expanded && setExpanded(true)}
@@ -326,73 +313,45 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-  const reduced = useReducedMotion();
   const navigate = useNavigate();
 
   return (
     <div className="flex min-h-screen">
-      <AmbientLayer />
-
-      {/* Desktop sidebar — floating control panel */}
-      <motion.aside
-        animate={{ width: collapsed ? 60 : 236 }}
-        transition={{ type: "spring", stiffness: 300, damping: 32 }}
-        className="sticky top-0 z-20 hidden h-screen shrink-0 flex-col border-r border-border bg-sidebar md:flex"
-      >
-        <div className={cn("flex h-14 items-center gap-2 px-4", collapsed && "justify-center px-0")}>
-          <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
-          <AnimatePresence initial={false}>
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -6 }}
-                transition={{ duration: 0.18 }}
-                className="whitespace-nowrap text-sm font-semibold tracking-tight"
-              >
-                DealFlow<span className="font-normal text-muted-foreground"> AI</span>
-              </motion.span>
-            )}
-          </AnimatePresence>
+      {/* Desktop sidebar — deep black tool rail */}
+      <aside className="sticky top-0 z-20 hidden h-screen w-[232px] shrink-0 flex-col bg-[#0f0f0d] md:flex">
+        <div className="flex h-14 items-center px-5">
+          <span className="text-[13px] font-semibold tracking-[0.22em] text-[#f5f0e6]">
+            DEALFLOW
+          </span>
         </div>
-        <div className="flex-1 overflow-y-auto py-2">
-          <NavList collapsed={collapsed} />
+        <div className="flex-1 overflow-y-auto py-3">
+          <NavList />
         </div>
-        <UserMenu collapsed={collapsed} />
-        <button
-          type="button"
-          onClick={() => setCollapsed((c) => !c)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="absolute -right-3 top-16 z-10 flex size-6 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-all hover:border-[#191713]/50 hover:text-foreground"
-        >
-          <ChevronLeft className={cn("size-3.5 transition-transform duration-300", collapsed && "rotate-180")} />
-        </button>
-      </motion.aside>
+        <UserMenu />
+      </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/85 px-4 backdrop-blur md:px-6">
+      <div className="flex min-w-0 flex-1 flex-col pb-14 md:pb-0">
+        {/* Top bar — minimal */}
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/90 px-4 backdrop-blur md:px-8">
           <div className="flex items-center gap-3">
-            {/* Mobile brand + drawer */}
+            {/* Mobile drawer */}
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
                   <Menu className="size-4" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-72 border-border bg-sidebar p-0">
-                <SheetTitle className="flex h-14 items-center gap-2 border-b border-border px-4 text-sm font-semibold">
-                  <img src={logo} alt="" className="size-7 rounded-md" />
-                  DealFlow<span className="font-normal text-muted-foreground"> AI</span>
+              <SheetContent side="left" className="w-72 border-border bg-[#0f0f0d] p-0">
+                <SheetTitle className="flex h-14 items-center border-b border-[#f5f0e6]/8 px-5 text-[13px] font-semibold tracking-[0.22em] text-[#f5f0e6]">
+                  DEALFLOW
                 </SheetTitle>
                 <div className="flex h-[calc(100%-3.5rem)] flex-col">
                   <div className="flex-1 overflow-y-auto py-4">
-                    <NavList collapsed={false} onNavigate={() => setMobileOpen(false)} />
+                    <NavList onNavigate={() => setMobileOpen(false)} />
                   </div>
-                  <UserMenu collapsed={false} />
+                  <UserMenu />
                 </div>
               </SheetContent>
             </Sheet>
@@ -407,35 +366,58 @@ export function AppShell({
               type="button"
               onClick={() => navigate("/assistant")}
               aria-label="Open AI Assistant"
-              className="hidden size-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-card text-foreground transition-colors hover:bg-secondary sm:flex"
+              className="hidden size-8 cursor-pointer items-center justify-center rounded-md border border-border bg-card text-[#6f4b5e] transition-colors hover:bg-secondary sm:flex"
             >
               <Bot className="size-4" />
             </button>
             <NotificationsButton />
-            <kbd className="ml-1 hidden items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground lg:flex">
-              ⌘K
-            </kbd>
           </div>
         </header>
 
-        {/* Workspace plane */}
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-6 md:py-8">
+        {/* Workspace */}
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-8 md:py-8">
           <motion.div
             key={location.pathname}
-            initial={reduced ? false : { opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
               <h1 className="text-xl font-semibold tracking-tight md:hidden">{title}</h1>
+              {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
             {children}
           </motion.div>
         </main>
       </div>
 
+      {/* Mobile bottom navigation */}
+      <nav
+        aria-label="Primary mobile"
+        className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-stretch justify-around border-t border-border bg-card md:hidden"
+      >
+        {MOBILE_NAV.map((item) => {
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              aria-label={item.label}
+              className={({ isActive }) =>
+                cn(
+                  "flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px]",
+                  isActive ? "font-medium text-foreground" : "text-muted-foreground",
+                )
+              }
+            >
+              <Icon className="size-4" />
+              {item.label}
+            </NavLink>
+          );
+        })}
+      </nav>
+
       <CommandPalette />
     </div>
   );
 }
-

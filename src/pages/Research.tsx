@@ -69,7 +69,7 @@ export default function ResearchPage() {
                   className={
                     "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors " +
                     (industryFilter === ""
-                      ? "bg-[#191713] text-[#f7f3ea]"
+                      ? "bg-[#171613] text-[#f5f0e6]"
                       : "text-muted-foreground hover:text-foreground")
                   }
                 >
@@ -84,7 +84,7 @@ export default function ResearchPage() {
                     className={
                       "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors " +
                       (industryFilter === ind
-                        ? "bg-[#191713] text-[#f7f3ea]"
+                        ? "bg-[#171613] text-[#f5f0e6]"
                         : "text-muted-foreground hover:text-foreground")
                     }
                   >
@@ -150,7 +150,7 @@ export default function ResearchPage() {
                       href={`https://www.google.com/search?q=${encodeURIComponent(`${s.company} ${s.location}`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex h-8 items-center gap-1 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:border-[#b9ae93] hover:text-foreground"
+                      className="flex h-8 items-center gap-1 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:border-[#b3a894] hover:text-foreground"
                     >
                       <ExternalLink className="size-3" /> Verify
                     </a>

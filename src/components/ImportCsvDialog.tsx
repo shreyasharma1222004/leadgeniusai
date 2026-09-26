@@ -259,7 +259,7 @@ export function ImportCsvDialog({ className }: { className?: string }) {
           <div aria-live="polite" className="flex flex-col gap-1.5">
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-[#191713] transition-all duration-300"
+                className="h-full rounded-full bg-[#171613] transition-all duration-300"
                 style={{ width: `${progress}%` }}
               />
             </div>

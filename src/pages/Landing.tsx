@@ -248,7 +248,7 @@ export default function Landing() {
       {/* Hero */}
       <section className="relative mx-auto max-w-6xl px-4 pb-16 pt-16 md:px-8 md:pb-24 md:pt-24">
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 mx-auto h-[320px] max-w-4xl">
-          <div className="absolute left-1/4 top-8 size-64 rounded-full bg-[#e8dfc9]/60 blur-[110px]" />
+          <div className="absolute left-1/4 top-8 size-64 rounded-full bg-[#e4ddcf]/60 blur-[110px]" />
         </div>
         <div className="mx-auto max-w-3xl text-center">
           <p className="label-caps mx-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-muted-foreground">
@@ -264,7 +264,7 @@ export default function Landing() {
             follow-ups on schedule — all in one simple sales workspace.
           </p>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-            <Button asChild size="lg" className="glow-primary h-11 bg-[#191713] px-6 text-[15px] text-[#f7f3ea] hover:bg-[#33302a]">
+            <Button asChild size="lg" className="glow-primary h-11 bg-[#171613] px-6 text-[15px] text-[#f5f0e6] hover:bg-[#33302a]">
               <Link to="/auth">
                 Start for free <ArrowRight className="size-4" />
               </Link>
@@ -379,7 +379,7 @@ export default function Landing() {
                     className={cn(
                       "cursor-pointer rounded px-3 py-1.5 text-xs font-medium transition-colors",
                       active
-                        ? "bg-[#191713] text-[#f7f3ea]"
+                        ? "bg-[#171613] text-[#f5f0e6]"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -401,14 +401,14 @@ export default function Landing() {
                   className={cn(
                     "depth-card-hover flex flex-col rounded-xl border bg-card p-5",
                     tier.highlight
-                      ? "border-[#191713] shadow-[0_10px_30px_-18px_rgba(68,58,38,0.5)]"
+                      ? "border-[#171613] shadow-[0_10px_30px_-18px_rgba(68,58,38,0.5)]"
                       : "border-border",
                   )}
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold">{tier.name}</p>
                     {tier.highlight && (
-                      <span className="rounded-full border border-[#191713]/40 bg-[#191713] px-2 py-0.5 text-[10px] font-medium text-[#f7f3ea]">
+                      <span className="rounded-full border border-[#171613]/40 bg-[#171613] px-2 py-0.5 text-[10px] font-medium text-[#f5f0e6]">
                         Popular
                       </span>
                     )}
@@ -431,7 +431,7 @@ export default function Landing() {
                       <li key={f} className="flex items-start gap-2 text-[13px]">
                         <span
                           aria-hidden
-                          className="mt-[7px] size-1 shrink-0 rounded-full bg-[#8a7d63]"
+                          className="mt-[7px] size-1 shrink-0 rounded-full bg-[#9a9285]"
                         />
                         {f}
                       </li>
@@ -469,13 +469,13 @@ export default function Landing() {
       {/* Final CTA */}
       <section className="py-20 md:py-28">
         <div className="mx-auto max-w-6xl px-4 md:px-8">
-          <div className="rounded-xl border border-[#191713] bg-[#191713] px-6 py-16 text-center text-[#f7f3ea] md:px-16">
-            <p className="label-caps text-[#f7f3ea]/60">DealFlow AI</p>
+          <div className="rounded-xl border border-[#171613] bg-[#171613] px-6 py-16 text-center text-[#f5f0e6] md:px-16">
+            <p className="label-caps text-[#f5f0e6]/60">DealFlow AI</p>
             <h2 className="mx-auto mt-4 max-w-2xl text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
               Your next customer could already be in your lead list.
             </h2>
             <div className="mt-7 flex flex-wrap justify-center gap-3">
-              <Button asChild size="lg" className="h-11 bg-[#f7f3ea] px-6 text-[#191713] hover:bg-white">
+              <Button asChild size="lg" className="h-11 bg-[#f5f0e6] px-6 text-[#171613] hover:bg-white">
                 <Link to="/auth">
                   Start for free <ArrowRight className="size-4" />
                 </Link>
@@ -484,12 +484,12 @@ export default function Landing() {
                 asChild
                 size="lg"
                 variant="outline"
-                className="h-11 border-[#f7f3ea]/30 bg-transparent px-6 text-[#f7f3ea] hover:bg-[#f7f3ea]/10 hover:text-[#f7f3ea]"
+                className="h-11 border-[#f5f0e6]/30 bg-transparent px-6 text-[#f5f0e6] hover:bg-[#f5f0e6]/10 hover:text-[#f5f0e6]"
               >
                 <Link to="/auth">Create free account</Link>
               </Button>
             </div>
-            <p className="mt-4 text-xs text-[#f7f3ea]/50">
+            <p className="mt-4 text-xs text-[#f5f0e6]/50">
               Find the right leads. Say the right thing. Follow up at the right time.
             </p>
           </div>
@@ -581,15 +581,15 @@ function DashboardPreview() {
         <div className="min-w-0 border-r border-border">
           <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
             <span className="text-xs font-semibold">Leads</span>
-            <span className="rounded bg-[#191713] px-1.5 py-0.5 text-[10px] font-medium text-[#f7f3ea]">
+            <span className="rounded bg-[#171613] px-1.5 py-0.5 text-[10px] font-medium text-[#f5f0e6]">
               + Add lead
             </span>
           </div>
           <div>
             {[
-              { n: "Sarah Mitchell", c: "Nova Studio", s: "Interested", cls: "border border-border bg-[#ece6d8] text-[#443f36]", sc: "87" },
-              { n: "Priya Raman", c: "Elevate Commerce", s: "Meeting", cls: "border border-[#191713]/30 bg-[#191713] text-[#f7f3ea]", sc: "92" },
-              { n: "Daniel Osei", c: "Northstar Digital", s: "Replied", cls: "border border-border bg-[#e9e2d2] text-[#443f36]", sc: "81" },
+              { n: "Sarah Mitchell", c: "Nova Studio", s: "Interested", cls: "border border-border bg-[#e4ddcf] text-[#443f36]", sc: "87" },
+              { n: "Priya Raman", c: "Elevate Commerce", s: "Meeting", cls: "border border-[#171613]/30 bg-[#171613] text-[#f5f0e6]", sc: "92" },
+              { n: "Daniel Osei", c: "Northstar Digital", s: "Replied", cls: "border border-border bg-[#e4ddcf] text-[#443f36]", sc: "81" },
               { n: "Elena Vasquez", c: "Orbit Labs", s: "New", cls: "border border-border bg-card text-muted-foreground", sc: "78" },
               { n: "Tom Alvarez", c: "PixelCraft", s: "New", cls: "border border-border bg-card text-muted-foreground", sc: "71" },
             ].map((r) => (
@@ -630,20 +630,20 @@ function DashboardPreview() {
             ].map(([label, value]) => (
               <div key={label as string} className="flex items-center gap-2">
                 <span className="w-16 text-[9px] text-muted-foreground">{label}</span>
-                <div className="h-1 flex-1 overflow-hidden rounded-full bg-[#e4dcc9]">
-                  <div className="h-full rounded-full bg-[#191713]" style={{ width: `${value}%` }} />
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-[#e4ddcf]">
+                  <div className="h-full rounded-full bg-[#171613]" style={{ width: `${value}%` }} />
                 </div>
               </div>
             ))}
           </div>
-          <div className="mt-3 rounded-md border border-border bg-[#ece6d8] p-2">
+          <div className="mt-3 rounded-md border border-border bg-[#e4ddcf] p-2">
             <p className="text-[9px] font-medium text-[#443f36]">Pain point</p>
             <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
               Their current website experience may limit conversion from paid traffic.
             </p>
           </div>
           <div className="mt-3 flex gap-1">
-            <span className="rounded bg-[#191713] px-1.5 py-1 text-[9px] font-medium text-[#f7f3ea]">
+            <span className="rounded bg-[#171613] px-1.5 py-1 text-[9px] font-medium text-[#f5f0e6]">
               Generate outreach
             </span>
             <span className="rounded border border-border px-1.5 py-1 text-[9px] text-muted-foreground">

@@ -96,13 +96,13 @@ export default function AnalyticsPage() {
                 {a.funnel.map((stage) => (
                   <div key={stage.key} className="flex items-center gap-3">
                     <span className="w-20 shrink-0 text-xs text-muted-foreground">{stage.label}</span>
-                    <div className="h-6 flex-1 overflow-hidden rounded-md bg-[#e4dcc9]">
+                    <div className="h-6 flex-1 overflow-hidden rounded-md bg-[#e4ddcf]">
                       <div
                         className={cn(
                           "flex h-full items-center justify-end rounded-md px-2 transition-all",
                           stage.key === "won"
-                            ? "bg-[#191713] text-[#f7f3ea]"
-                            : "bg-[#8a7d63] text-[#f7f3ea]",
+                            ? "bg-[#171613] text-[#f5f0e6]"
+                            : "bg-[#9a9285] text-[#f5f0e6]",
                         )}
                         style={{ width: `${Math.max(8, (stage.count / maxFunnel) * 100)}%` }}
                       >
@@ -157,7 +157,7 @@ export default function AnalyticsPage() {
                   <Link
                     key={ind.name}
                     to="/leads"
-                    className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-[#b9ae93] hover:text-foreground"
+                    className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-[#b3a894] hover:text-foreground"
                   >
                     {ind.name} · {ind.count}
                   </Link>

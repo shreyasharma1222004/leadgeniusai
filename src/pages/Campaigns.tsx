@@ -211,7 +211,7 @@ export default function CampaignsPage() {
                   className={
                     "rounded-full px-2 py-0.5 text-[10px] font-medium " +
                     (campaign.status === "active"
-                      ? "border border-[#191713]/40 bg-[#191713] text-[#f7f3ea]"
+                      ? "border border-[#171613]/40 bg-[#171613] text-[#f5f0e6]"
                       : campaign.status === "completed"
                         ? "border border-border bg-secondary text-muted-foreground"
                         : "border border-border bg-card text-muted-foreground/70")
@@ -303,7 +303,7 @@ export default function CampaignsPage() {
                       className={
                         "cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-colors " +
                         (form.channel === c
-                          ? "border-[#191713] bg-[#191713] text-[#f7f3ea]"
+                          ? "border-[#171613] bg-[#171613] text-[#f5f0e6]"
                           : "border-border text-muted-foreground hover:text-foreground")
                       }
                     >
@@ -425,7 +425,7 @@ export default function CampaignsPage() {
                   className={
                     "size-2 shrink-0 rounded-full " +
                     (row.status === "sent"
-                      ? "bg-[#191713]"
+                      ? "bg-[#171613]"
                       : row.status === "failed"
                         ? "bg-destructive"
                         : "bg-border")

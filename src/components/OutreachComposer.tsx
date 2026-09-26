@@ -233,7 +233,7 @@ export function OutreachComposer({
                   className={
                     "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors " +
                     (channel === c
-                      ? "border-[#191713] bg-[#191713] text-[#f7f3ea]"
+                      ? "border-[#171613] bg-[#171613] text-[#f5f0e6]"
                       : "border-border text-muted-foreground hover:text-foreground")
                   }
                 >

@@ -42,75 +42,75 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* CHANGE VALUES FOR THEME — Warm editorial: paper beige surfaces, ink black text */
+/* CHANGE VALUES FOR THEME — Editorial beige + black product design system */
 :root {
   --radius: 0.5rem;
-  --background: #f4f0e6;
-  --foreground: #191713;
-  --card: #fbf8f1;
-  --card-foreground: #191713;
-  --popover: #fbf8f1;
-  --popover-foreground: #191713;
-  --primary: #191713;
-  --primary-foreground: #f7f3ea;
-  --secondary: #ece6d8;
-  --secondary-foreground: #443f36;
-  --muted: #ece7da;
-  --muted-foreground: #7d766a;
-  --accent: #e9e2d2;
-  --accent-foreground: #191713;
-  --destructive: #b3402e;
-  --border: #ddd5c4;
-  --input: #d5ccb8;
-  --ring: rgba(25, 23, 19, 0.35);
-  --chart-1: #191713;
-  --chart-2: #8a7d63;
-  --chart-3: #b0a488;
-  --chart-4: #6b6152;
-  --chart-5: #d0c5ab;
-  --sidebar: #ede8db;
-  --sidebar-foreground: #191713;
-  --sidebar-primary: #191713;
-  --sidebar-primary-foreground: #f7f3ea;
-  --sidebar-accent: #e3dccb;
-  --sidebar-accent-foreground: #191713;
-  --sidebar-border: #ddd5c4;
-  --sidebar-ring: rgba(25, 23, 19, 0.35);
+  --background: #ede7da;
+  --foreground: #171613;
+  --card: #f5f0e6;
+  --card-foreground: #171613;
+  --popover: #f5f0e6;
+  --popover-foreground: #171613;
+  --primary: #171613;
+  --primary-foreground: #f5f0e6;
+  --secondary: #e4ddcf;
+  --secondary-foreground: #3d3a33;
+  --muted: #e7e0d2;
+  --muted-foreground: #777064;
+  --accent: #e4ddcf;
+  --accent-foreground: #171613;
+  --destructive: #a8442f;
+  --border: #cfc6b7;
+  --input: #c9bfae;
+  --ring: rgba(111, 75, 94, 0.45);
+  --chart-1: #171613;
+  --chart-2: #6f4b5e;
+  --chart-3: #a06b3c;
+  --chart-4: #53634a;
+  --chart-5: #9a9285;
+  --sidebar: #0f0f0d;
+  --sidebar-foreground: #f5f0e6;
+  --sidebar-primary: #a06b3c;
+  --sidebar-primary-foreground: #f5f0e6;
+  --sidebar-accent: #1e1d19;
+  --sidebar-accent-foreground: #f5f0e6;
+  --sidebar-border: rgba(245, 240, 230, 0.08);
+  --sidebar-ring: rgba(111, 75, 94, 0.55);
 }
 
-/* Same palette for both modes — the app is one warm light environment */
+/* Single warm environment — both modes share the same palette */
 .dark {
-  --background: #f4f0e6;
-  --foreground: #191713;
-  --card: #fbf8f1;
-  --card-foreground: #191713;
-  --popover: #fbf8f1;
-  --popover-foreground: #191713;
-  --primary: #191713;
-  --primary-foreground: #f7f3ea;
-  --secondary: #ece6d8;
-  --secondary-foreground: #443f36;
-  --muted: #ece7da;
-  --muted-foreground: #7d766a;
-  --accent: #e9e2d2;
-  --accent-foreground: #191713;
-  --destructive: #b3402e;
-  --border: #ddd5c4;
-  --input: #d5ccb8;
-  --ring: rgba(25, 23, 19, 0.35);
-  --chart-1: #191713;
-  --chart-2: #8a7d63;
-  --chart-3: #b0a488;
-  --chart-4: #6b6152;
-  --chart-5: #d0c5ab;
-  --sidebar: #ede8db;
-  --sidebar-foreground: #191713;
-  --sidebar-primary: #191713;
-  --sidebar-primary-foreground: #f7f3ea;
-  --sidebar-accent: #e3dccb;
-  --sidebar-accent-foreground: #191713;
-  --sidebar-border: #ddd5c4;
-  --sidebar-ring: rgba(25, 23, 19, 0.35);
+  --background: #ede7da;
+  --foreground: #171613;
+  --card: #f5f0e6;
+  --card-foreground: #171613;
+  --popover: #f5f0e6;
+  --popover-foreground: #171613;
+  --primary: #171613;
+  --primary-foreground: #f5f0e6;
+  --secondary: #e4ddcf;
+  --secondary-foreground: #3d3a33;
+  --muted: #e7e0d2;
+  --muted-foreground: #777064;
+  --accent: #e4ddcf;
+  --accent-foreground: #171613;
+  --destructive: #a8442f;
+  --border: #cfc6b7;
+  --input: #c9bfae;
+  --ring: rgba(111, 75, 94, 0.45);
+  --chart-1: #171613;
+  --chart-2: #6f4b5e;
+  --chart-3: #a06b3c;
+  --chart-4: #53634a;
+  --chart-5: #9a9285;
+  --sidebar: #0f0f0d;
+  --sidebar-foreground: #f5f0e6;
+  --sidebar-primary: #a06b3c;
+  --sidebar-primary-foreground: #f5f0e6;
+  --sidebar-accent: #1e1d19;
+  --sidebar-accent-foreground: #f5f0e6;
+  --sidebar-border: rgba(245, 240, 230, 0.08);
+  --sidebar-ring: rgba(111, 75, 94, 0.55);
 }
 
 @layer base {
@@ -119,28 +119,25 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "ss01", "cv11";
+    font-family: "Inter Variable", ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-feature-settings: "cv11", "ss01";
     text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
   }
   button:not([disabled]),
   [role="button"]:not([disabled]) {
     cursor: pointer;
   }
   ::selection {
-    background: #191713;
-    color: #f7f3ea;
+    background: #171613;
+    color: #f5f0e6;
   }
 }
 
-/* ── Environment ─────────────────────────────────────────────────────────
-   Warm paper: a faint light from the top, paper grain. No neon, no grid. */
+/* Flat warm canvas — the beige itself is the breathing room */
 body {
-  background-color: #f4f0e6;
-  background-image:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 220px),
-    radial-gradient(rgba(25, 23, 19, 0.028) 1px, transparent 1px);
-  background-size: 100% 100%, 26px 26px;
-  background-attachment: fixed;
+  background-color: #ede7da;
 }
 
 ::-webkit-scrollbar {
@@ -151,101 +148,78 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d8cfbc;
+  background: #cfc6b7;
   border-radius: 8px;
-  border: 2px solid #f4f0e6;
+  border: 2px solid #ede7da;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #c4b99f;
+  background: #b3a894;
 }
 
-/* ── Elevation utilities (same class names, quieter treatment) ─────────── */
+/* ── Elevation — rare and subtle. Most of the app is intentionally flat. ── */
 
-/* Layer 1 — workspace plane */
 .spatial-plane {
-  box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.7) inset,
-    0 1px 2px rgba(25, 23, 19, 0.05),
-    0 16px 40px -24px rgba(68, 58, 38, 0.28);
+  box-shadow: 0 1px 2px rgba(23, 22, 19, 0.04);
 }
 
-/* Layer 2 — card */
 .depth-card {
-  box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.8) inset,
-    0 1px 2px rgba(25, 23, 19, 0.05),
-    0 10px 26px -18px rgba(68, 58, 38, 0.3);
+  box-shadow: 0 1px 2px rgba(23, 22, 19, 0.04);
 }
 .depth-card-hover {
-  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 .depth-card-hover:hover {
-  border-color: #b9ae93;
-  box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.9) inset,
-    0 2px 4px rgba(25, 23, 19, 0.06),
-    0 14px 30px -18px rgba(68, 58, 38, 0.38);
+  border-color: #b3a894;
   transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(23, 22, 19, 0.07);
 }
 
-/* Layer 3 — menus & popovers */
 .depth-pop {
   box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.9) inset,
-    0 2px 6px rgba(25, 23, 19, 0.06),
-    0 18px 44px -18px rgba(68, 58, 38, 0.35);
+    0 1px 2px rgba(23, 22, 19, 0.06),
+    0 12px 32px -12px rgba(23, 22, 19, 0.18);
 }
 
-/* Layer 5 — immersive panels */
 .depth-immersive {
-  box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.9) inset,
-    0 24px 70px -22px rgba(68, 58, 38, 0.4);
+  box-shadow: 0 20px 60px -20px rgba(23, 22, 19, 0.3);
 }
 
-/* Selected sidebar item — ink-on-paper active state */
+/* Sidebar active item — lighter black surface; the moving indicator lives in AppShell */
 .nav-pill-active {
-  background: #191713;
-  color: #f7f3ea;
-  border: 1px solid #191713;
-  box-shadow: 0 2px 8px -3px rgba(25, 23, 19, 0.45);
+  background: #1e1d19;
+  color: #f5f0e6;
 }
 
-/* Primary button — solid ink, gentle lift */
+/* Primary (black) button */
 .glow-primary {
-  box-shadow:
-    0 1px 2px rgba(25, 23, 19, 0.2),
-    0 6px 16px -8px rgba(25, 23, 19, 0.4);
+  box-shadow: 0 1px 2px rgba(15, 15, 13, 0.2);
 }
 .glow-primary:hover {
-  box-shadow:
-    0 1px 2px rgba(25, 23, 19, 0.25),
-    0 8px 20px -8px rgba(25, 23, 19, 0.5);
+  box-shadow: 0 2px 6px rgba(15, 15, 13, 0.28);
 }
 
-/* Assistant tag — quiet outline chip */
+/* AI tag — muted plum */
 .ai-chip {
-  color: #5c5443;
-  background: transparent;
-  border: 1px solid #d5ccb8;
+  color: #6f4b5e;
+  background: rgba(111, 75, 94, 0.08);
+  border: 1px solid rgba(111, 75, 94, 0.22);
 }
 
-/* Assistant cards — calm double-rule border, no animation */
+/* Lead intelligence cards — quiet plum-ruled surface */
 .ai-gradient-border {
-  border: 1px solid #d5ccb8;
-  box-shadow: 0 0 0 3px rgba(213, 204, 184, 0.25);
+  border: 1px solid rgba(111, 75, 94, 0.28);
+  background: #f5f0e6;
 }
 
-/* Accent dot pulse — kept, but subtle and ink-toned */
+/* Text/focus transitions only */
 .ai-pulse {
   animation: ai-pulse 2.8s ease-in-out infinite;
 }
 @keyframes ai-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+  50% { opacity: 0.6; }
 }
 
-/* Soft ambient float — kept for reduced-motion-safe hero geometry only */
 .ambient-float {
   animation: ambient-float 14s ease-in-out infinite;
 }
@@ -254,12 +228,11 @@ body {
   50% { transform: translate3d(0, -8px, 0); }
 }
 
-/* Content entrance */
 .stage-enter {
-  animation: stage-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: stage-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @keyframes stage-enter {
-  from { opacity: 0; transform: translateY(5px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -278,7 +251,7 @@ body {
   }
 }
 
-/* Kept from previous themes — used across existing pages */
+/* Utility text styles used across pages */
 .frame-line {
   background-image: linear-gradient(to right, transparent, var(--border) 18%, var(--border) 82%, transparent);
 }

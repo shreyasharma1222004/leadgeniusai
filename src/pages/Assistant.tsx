@@ -97,7 +97,7 @@ export default function AssistantPage() {
                   className={cn(
                     "max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed sm:max-w-[75%]",
                     turn.role === "user"
-                      ? "border border-[#191713]/30 bg-[#ece6d8]"
+                      ? "border border-[#171613]/30 bg-[#e4ddcf]"
                       : "ai-gradient-border rounded-lg",
                   )}
                 >
@@ -111,7 +111,7 @@ export default function AssistantPage() {
                     <ul className="mt-2 space-y-1">
                       {turn.bullets.map((b, bi) => (
                         <li key={bi} className="flex gap-2 text-[13px]">
-                          <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8a7d63]" />
+                          <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#9a9285]" />
                           {b}
                         </li>
                       ))}
@@ -126,7 +126,7 @@ export default function AssistantPage() {
                           <Link
                             key={id}
                             to={`/leads/${id}`}
-                            className="rounded-full border border-border bg-card px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-[#b9ae93] hover:text-foreground"
+                            className="rounded-full border border-border bg-card px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-[#b3a894] hover:text-foreground"
                           >
                             {lead.name} →
                           </Link>
@@ -155,7 +155,7 @@ export default function AssistantPage() {
                   key={s}
                   type="button"
                   onClick={() => ask(s)}
-                  className="cursor-pointer rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[#b9ae93] hover:text-foreground"
+                  className="cursor-pointer rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[#b3a894] hover:text-foreground"
                 >
                   {s}
                 </button>

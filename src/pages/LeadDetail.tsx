@@ -497,14 +497,14 @@ export default function LeadDetailPage() {
                         className={cn(
                           "relative mt-1 flex size-[15px] shrink-0 items-center justify-center rounded-full border",
                           f.status === "done"
-                            ? "border-[#191713] bg-[#191713]"
+                            ? "border-[#171613] bg-[#171613]"
                             : overdue
                               ? "border-destructive/60 bg-destructive/10"
                               : "border-border bg-background",
                         )}
                       >
                         {f.status === "done" && (
-                          <Check className="size-2.5 text-[#f7f3ea]" />
+                          <Check className="size-2.5 text-[#f5f0e6]" />
                         )}
                       </span>
                       <div className="min-w-0 flex-1">
@@ -679,7 +679,7 @@ function MessageThread({
                 className={cn(
                   "max-w-[85%] rounded-lg border px-3.5 py-2.5",
                   outbound
-                    ? "ml-auto border-[#191713]/25 bg-[#ece6d8]"
+                    ? "ml-auto border-[#171613]/25 bg-[#e4ddcf]"
                     : "border-border bg-muted/40",
                 )}
               >

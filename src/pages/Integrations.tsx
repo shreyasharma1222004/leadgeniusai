@@ -89,14 +89,14 @@ export default function IntegrationsPage() {
       <section
         className={cn(
           "mb-6 rounded-lg border p-5",
-          gmailActive ? "border-[#191713]/30 bg-[#f7f3ea]" : "border-border bg-card",
+          gmailActive ? "border-[#171613]/30 bg-[#f5f0e6]" : "border-border bg-card",
         )}
       >
         <div className="flex flex-wrap items-center gap-2">
           <Mail className="size-5 text-foreground" />
           <h2 className="text-sm font-semibold">Send to anybody — connect your Gmail</h2>
           {gmailActive ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-[#191713]/40 bg-[#191713] px-2 py-0.5 text-[10px] font-medium text-[#f7f3ea]">
+            <span className="inline-flex items-center gap-1 rounded-full border border-[#171613]/40 bg-[#171613] px-2 py-0.5 text-[10px] font-medium text-[#f5f0e6]">
               <CheckCircle2 className="size-3" /> Connected as {delivery?.from}
             </span>
           ) : (
@@ -173,7 +173,7 @@ export default function IntegrationsPage() {
               },
             ].map((step, i) => (
               <li key={step.title} className="flex gap-3">
-                <span className="tabular flex size-6 shrink-0 items-center justify-center rounded-full border border-[#191713]/40 bg-[#191713] text-[11px] font-semibold text-[#f7f3ea]">
+                <span className="tabular flex size-6 shrink-0 items-center justify-center rounded-full border border-[#171613]/40 bg-[#171613] text-[11px] font-semibold text-[#f5f0e6]">
                   {i + 1}
                 </span>
                 <div>
@@ -214,7 +214,7 @@ export default function IntegrationsPage() {
         <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
           {DELIVERABILITY_TIPS.map((tip) => (
             <li key={tip} className="flex items-start gap-2 text-[13px] leading-relaxed text-muted-foreground">
-              <span aria-hidden className="mt-[7px] size-1 shrink-0 rounded-full bg-[#8a7d63]" />
+              <span aria-hidden className="mt-[7px] size-1 shrink-0 rounded-full bg-[#6f4b5e]" />
               {tip}
             </li>
           ))}
@@ -231,7 +231,7 @@ export default function IntegrationsPage() {
               className={cn(
                 "flex size-10 shrink-0 items-center justify-center rounded-md",
                 row.status === "live"
-                  ? "border border-[#191713]/40 bg-[#191713] text-[#f7f3ea]"
+                  ? "border border-[#171613]/40 bg-[#171613] text-[#f5f0e6]"
                   : "border border-border bg-secondary text-muted-foreground",
               )}
             >
@@ -244,7 +244,7 @@ export default function IntegrationsPage() {
                   className={cn(
                     "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
                     row.status === "live"
-                      ? "border border-[#191713]/40 bg-[#191713] text-[#f7f3ea]"
+                      ? "border border-[#171613]/40 bg-[#171613] text-[#f5f0e6]"
                       : "border border-border bg-secondary text-muted-foreground",
                   )}
                 >

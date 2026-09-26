@@ -2,16 +2,16 @@ import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } fro
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-/* ── Shared spring physics — consistent feel app-wide ─────────────────────── */
+/* ── Shared motion — consistent feel app-wide ─────────────────────────────── */
 export const SPRING = { type: "spring", stiffness: 380, damping: 32, mass: 0.9 } as const;
 export const SPRING_SOFT = { type: "spring", stiffness: 220, damping: 26 } as const;
 export const PAGE_ENTER = {
-  initial: { opacity: 0, y: 10 },
+  initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
+  transition: { duration: 0.26, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
 } as const;
 
-/* ── TiltCard: elevated paper card with a gentle hover lift ───────────────── */
+/* ── TiltCard: flat workspace card, 1–2px hover lift ──────────────────────── */
 export function TiltCard({
   children,
   className,
@@ -41,7 +41,7 @@ export function TiltCard({
   );
 }
 
-/* ── ActionButton: solid ink button with a subtle lift ────────────────────── */
+/* ── AIButton: muted plum, cream text — AI is a capability, not an identity ── */
 export function AIButton({
   children,
   onClick,
@@ -65,7 +65,7 @@ export function AIButton({
       whileTap={disabled || reduced ? undefined : { y: 0, scale: 0.99 }}
       transition={SPRING}
       className={cn(
-        "inline-flex cursor-pointer items-center justify-center gap-2 rounded-md bg-[#191713] font-medium text-[#f7f3ea] transition-colors hover:bg-[#33302a]",
+        "inline-flex cursor-pointer items-center justify-center gap-2 rounded-md bg-[#6f4b5e] font-medium text-[#f5f0e6] transition-colors hover:bg-[#5d3e4e]",
         size === "default" ? "h-9 px-4 text-sm" : "h-7 px-2.5 text-xs",
         disabled && "pointer-events-none opacity-50",
         className,
@@ -76,12 +76,12 @@ export function AIButton({
   );
 }
 
-/* ── LeadScoreRing: 0 → score spring animation ───────────────────────────── */
+/* ── LeadScoreRing: 0 → score animation ──────────────────────────────────── */
 export function LeadScoreRing({
   score,
   size = 84,
   stroke = 7,
-  label = "High potential",
+  label = "Lead score",
   breakdown,
 }: {
   score: number;
@@ -108,13 +108,13 @@ export function LeadScoreRing({
     <div className="flex items-center gap-3">
       <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90">
-          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#ddd5c4" strokeWidth={stroke} />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e4ddcf" strokeWidth={stroke} />
           <motion.circle
             cx={size / 2}
             cy={size / 2}
             r={r}
             fill="none"
-            stroke="#191713"
+            stroke="#6f4b5e"
             strokeWidth={stroke}
             strokeLinecap="round"
             style={{ strokeDasharray: circumference, strokeDashoffset: dash }}
@@ -132,9 +132,9 @@ export function LeadScoreRing({
             {breakdown.slice(0, 4).map((b) => (
               <div key={b.label} className="flex items-center gap-2">
                 <span className="w-24 shrink-0 truncate text-[10px] text-muted-foreground">{b.label}</span>
-                <div className="h-1 w-20 overflow-hidden rounded-full bg-[#e4dcc9]">
+                <div className="h-1 w-20 overflow-hidden rounded-full bg-[#e4ddcf]">
                   <motion.div
-                    className="h-full rounded-full bg-[#191713]"
+                    className="h-full rounded-full bg-[#6f4b5e]"
                     initial={{ width: 0 }}
                     animate={{ width: `${Math.min(100, b.value)}%` }}
                     transition={{ ...SPRING_SOFT, delay: 0.15 }}
@@ -149,7 +149,7 @@ export function LeadScoreRing({
   );
 }
 
-/* ── FloatingSidePanel: glass panel from the right ─────────────────────────── */
+/* ── FloatingSidePanel: right-side panel, workspace stays visible ────────── */
 export function FloatingSidePanel({
   open,
   onClose,
@@ -168,8 +168,8 @@ export function FloatingSidePanel({
     <motion.div
       initial={false}
       animate={{ opacity: open ? 1 : 0, pointerEvents: open ? ("auto" as const) : ("none" as const) }}
-      transition={{ duration: 0.22 }}
-      className="fixed inset-0 z-50 bg-[#191713]/30 backdrop-blur-[2px]"
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 bg-[#171613]/25"
       onClick={onClose}
       aria-hidden={!open}
     >
@@ -202,12 +202,12 @@ export function FloatingSidePanel({
   );
 }
 
-/* ── AIGenerationStages: calm step progression ─────────────────────────────── */
+/* ── AIGenerationStages: calm text transitions, no effects ────────────────── */
 const DEFAULT_STAGES = [
-  "Analyzing lead…",
-  "Finding relevant context…",
-  "Personalizing message…",
-  "Optimizing opening…",
+  "Researching lead",
+  "Analyzing context",
+  "Writing opening",
+  "Polishing message",
 ];
 
 export function AIGenerationStages({
@@ -236,47 +236,28 @@ export function AIGenerationStages({
 
   return (
     <div className="rounded-lg border border-border bg-card px-4 py-3">
-      <p className="ai-chip label-caps inline-flex items-center gap-1.5 rounded-full px-2 py-0.5">
-        Sales Assistant
-      </p>
+      <p className="label-caps text-[#6f4b5e]">Drafting with AI</p>
       <ul className="mt-2.5 space-y-1.5">
         {stages.map((s, i) => (
           <li
             key={s}
             className={cn(
-              "flex items-center gap-2 text-[13px] transition-opacity",
+              "text-[13px] transition-opacity duration-300",
               i < step ? "text-muted-foreground" : i === step ? "text-foreground" : "opacity-40",
             )}
           >
-            <span
-              className={cn(
-                "flex size-4 shrink-0 items-center justify-center rounded-full border text-[9px]",
-                i < step
-                  ? "border-foreground bg-foreground text-[#f7f3ea]"
-                  : i === step
-                    ? "border-foreground text-foreground"
-                    : "border-border text-muted-foreground",
-              )}
-            >
-              {i < step ? "✓" : i + 1}
-            </span>
             {s}
           </li>
         ))}
         {done && (
-          <li className="stage-enter flex items-center gap-2 text-[13px] font-medium text-foreground">
-            <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-foreground bg-foreground text-[9px] text-[#f7f3ea]">
-              ✓
-            </span>
-            {doneLabel}
-          </li>
+          <li className="stage-enter text-[13px] font-medium text-[#53634a]">✓ {doneLabel}</li>
         )}
       </ul>
     </div>
   );
 }
 
-/* ── SpatialPage: soft entrance for page content ─────────────────────────── */
+/* ── SpatialPage: soft entrance ──────────────────────────────────────────── */
 export function SpatialPage({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <motion.div {...PAGE_ENTER} className={className}>
@@ -285,7 +266,7 @@ export function SpatialPage({ children, className }: { children: ReactNode; clas
   );
 }
 
-/* ── InsightCard: quiet ruled card for assistant content ─────────────────── */
+/* ── AIInsightCard: lead intelligence — quiet plum-ruled card ─────────────── */
 export function AIInsightCard({
   title,
   children,
@@ -296,8 +277,8 @@ export function AIInsightCard({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-lg border border-border bg-card p-4", className)}>
-      <p className="label-caps mb-2 text-muted-foreground">{title}</p>
+    <div className={cn("ai-gradient-border rounded-lg p-4", className)}>
+      <p className="label-caps mb-2 text-[#6f4b5e]">{title}</p>
       {children}
     </div>
   );
