@@ -175,7 +175,7 @@ export default function LeadsPage() {
             />
           </div>
 
-          <div className="flex items-center rounded-md border border-border bg-white/[0.03] p-0.5">
+          <div className="flex items-center rounded-md border border-border bg-card p-0.5">
             {(
               [
                 { key: "all", label: `All` },
@@ -189,7 +189,7 @@ export default function LeadsPage() {
                 className={cn(
                   "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
                   quickFilter === t.key
-                    ? "bg-[#8B5CF6]/20 text-[#c4b5fd] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)]"
+                    ? "bg-[#191713] text-[#f7f3ea]"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -223,10 +223,10 @@ export default function LeadsPage() {
           </DropdownMenu>
         </div>
 
-        {/* Bulk bar — violet action surface */}
+        {/* Bulk bar — action surface */}
         {selected.size > 0 && (
-          <div className="stage-enter flex flex-wrap items-center gap-2 rounded-lg border border-[#8B5CF6]/40 bg-[#8B5CF6]/[0.08] px-3 py-2 shadow-[0_0_24px_rgba(139,92,246,0.12)]">
-            <span className="text-xs font-medium text-[#c4b5fd]">
+          <div className="stage-enter flex flex-wrap items-center gap-2 rounded-lg border border-[#191713]/25 bg-[#ece6d8] px-3 py-2">
+            <span className="text-xs font-medium">
               {selected.size} selected
             </span>
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
@@ -328,7 +328,7 @@ export default function LeadsPage() {
                   <TableRow
                     key={lead._id}
                     onClick={() => setPanelLead(lead)}
-                    className="group cursor-pointer border-border/60 transition-colors hover:bg-white/[0.035]"
+                    className="group cursor-pointer border-border/60 transition-colors hover:bg-[#f7f3ea]"
                   >
                     <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
@@ -341,7 +341,7 @@ export default function LeadsPage() {
                       <span className="flex items-center gap-2.5">
                         <span
                           aria-hidden
-                          className="flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-[10px] font-semibold text-muted-foreground transition-all duration-200 group-hover:border-[#8B5CF6]/50 group-hover:text-[#c4b5fd] group-hover:shadow-[0_0_12px_rgba(139,92,246,0.35)]"
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-[10px] font-semibold text-muted-foreground transition-colors duration-200 group-hover:border-[#191713]/40 group-hover:text-foreground"
                         >
                           {initials(lead.name)}
                         </span>
@@ -385,7 +385,7 @@ export default function LeadsPage() {
                             className={cn(
                               "tabular text-sm font-medium",
                               lead.score >= 70
-                                ? "text-[#c4b5fd]"
+                                ? "text-foreground"
                                 : lead.score >= 40
                                   ? "text-foreground"
                                   : "text-muted-foreground",
@@ -393,15 +393,15 @@ export default function LeadsPage() {
                           >
                             {lead.score}
                           </span>
-                          <span className="h-0.5 w-10 overflow-hidden rounded-full bg-white/[0.08]">
+                          <span className="h-0.5 w-10 overflow-hidden rounded-full bg-[#e4dcc9]">
                             <span
                               className={cn(
                                 "block h-full rounded-full",
                                 lead.score >= 70
-                                  ? "bg-[#8B5CF6]"
+                                  ? "bg-[#191713]"
                                   : lead.score >= 40
-                                    ? "bg-white/30"
-                                    : "bg-white/15",
+                                    ? "bg-[#8a7d63]"
+                                    : "bg-[#c9bfa6]",
                               )}
                               style={{ width: `${lead.score}%` }}
                             />
@@ -413,7 +413,7 @@ export default function LeadsPage() {
                             e.stopPropagation();
                             mutationHelpers.analyze(lead);
                           }}
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-[#c4b5fd] underline-offset-2 transition-colors hover:bg-[#8B5CF6]/10 hover:underline"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-foreground underline underline-offset-2 transition-colors hover:bg-secondary"
                         >
                           <Sparkles className="size-3" /> Analyze
                         </button>
@@ -559,11 +559,11 @@ function MetricsHero({ leads, followUpDue }: { leads: Doc2[]; followUpDue: numbe
     const pct = (v: number) => (total === 0 ? 0 : Math.round((v / total) * 100));
 
     return [
-      { label: "Leads", value: total, pct: 100, icon: Users, tint: "text-[#c4b5fd]", sub: followUpDue === 0 ? "All caught up" : `${followUpDue} follow-up${followUpDue === 1 ? "" : "s"} due soon` },
-      { label: "Contacted", value: contacted, pct: pct(contacted), icon: Send, tint: "text-[#67E8F9]", sub: `${pct(contacted)}% of pipeline` },
-      { label: "Replies", value: replies, pct: pct(replies), icon: Reply, tint: "text-[#c084fc]", sub: `${pct(replies)}% of pipeline` },
-      { label: "Meetings", value: meetings, pct: pct(meetings), icon: CalendarCheck, tint: "text-[#FCD34D]", sub: `${pct(meetings)}% of pipeline` },
-      { label: "Won", value: won, pct: pct(won), icon: Trophy, tint: "text-[#8B5CF6]", sub: `${pct(won)}% of pipeline` },
+      { label: "Leads", value: total, pct: 100, icon: Users, sub: followUpDue === 0 ? "All caught up" : `${followUpDue} follow-up${followUpDue === 1 ? "" : "s"} due soon` },
+      { label: "Contacted", value: contacted, pct: pct(contacted), icon: Send, sub: `${pct(contacted)}% of pipeline` },
+      { label: "Replies", value: replies, pct: pct(replies), icon: Reply, sub: `${pct(replies)}% of pipeline` },
+      { label: "Meetings", value: meetings, pct: pct(meetings), icon: CalendarCheck, sub: `${pct(meetings)}% of pipeline` },
+      { label: "Won", value: won, pct: pct(won), icon: Trophy, sub: `${pct(won)}% of pipeline` },
     ];
   }, [leads, followUpDue]);
 
@@ -577,8 +577,7 @@ function MetricsHero({ leads, followUpDue }: { leads: Doc2[]; followUpDue: numbe
             </span>
             <span
               className={cn(
-                "flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]",
-                card.tint,
+                "flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-secondary text-foreground",
               )}
             >
               <card.icon className="size-3.5" />
@@ -587,9 +586,9 @@ function MetricsHero({ leads, followUpDue }: { leads: Doc2[]; followUpDue: numbe
           <p className="tabular mt-3 text-2xl font-semibold tracking-tight">
             {card.value}
           </p>
-          <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-[#e4dcc9]">
             <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A855F7]"
+              className="h-full rounded-full bg-[#191713]"
               initial={{ width: 0 }}
               animate={{ width: `${card.pct}%` }}
               transition={{ ...SPRING_SOFT, delay: 0.1 + i * 0.06 }}
@@ -662,7 +661,7 @@ function LeadRowMenu({
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
-      <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
+      <div className="flex size-11 items-center justify-center rounded-full border border-border bg-secondary text-foreground">
         <Users className="size-5" />
       </div>
       <h2 className="mt-4 text-lg font-semibold tracking-tight">

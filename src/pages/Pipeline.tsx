@@ -38,7 +38,7 @@ export default function PipelinePage() {
     return (
       <AppShell title="Pipeline">
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
-          <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
+          <div className="flex size-11 items-center justify-center rounded-full border border-border bg-secondary text-foreground">
             <Users className="size-5" />
           </div>
           <h2 className="mt-4 text-lg font-semibold tracking-tight">No leads on the board.</h2>
@@ -87,10 +87,10 @@ export default function PipelinePage() {
               className={cn(
                 "flex w-64 shrink-0 flex-col rounded-xl border transition-all duration-200",
                 isOver
-                  ? "border-[#8B5CF6]/70 bg-[#8B5CF6]/[0.07] shadow-[0_0_32px_rgba(139,92,246,0.18)]"
+                  ? "border-[#191713]/50 bg-[#ece6d8]"
                   : isDragging
-                    ? "border-border bg-sidebar/40"
-                    : "border-border bg-sidebar/60",
+                    ? "border-border bg-sidebar/60"
+                    : "border-border bg-sidebar/80",
               )}
             >
               <div className="flex items-center justify-between border-b border-border/70 px-3 py-2.5">
@@ -105,7 +105,7 @@ export default function PipelinePage() {
                 <span
                   className={cn(
                     "tabular text-xs",
-                    isOver ? "text-[#c4b5fd]" : "text-muted-foreground",
+                    isOver ? "text-foreground" : "text-muted-foreground",
                   )}
                 >
                   {columnLeads.length}
@@ -134,12 +134,12 @@ export default function PipelinePage() {
                     whileHover={dragId === null ? { y: -3 } : undefined}
                     style={
                       dragId === lead._id
-                        ? { boxShadow: "0 18px 40px rgba(0,0,0,0.5), 0 0 20px rgba(139,92,246,0.15)", zIndex: 20 }
+                        ? { boxShadow: "0 16px 32px -12px rgba(68, 58, 38, 0.45)", zIndex: 20 }
                         : undefined
                     }
                     className={cn(
-                      "relative cursor-grab rounded-lg border border-border bg-card p-3 shadow-sm transition-colors hover:border-white/15 active:cursor-grabbing",
-                      dragId === lead._id && "border-[#8B5CF6]/50",
+                      "relative cursor-grab rounded-lg border border-border bg-card p-3 shadow-sm transition-colors hover:border-[#b9ae93] active:cursor-grabbing",
+                      dragId === lead._id && "border-[#191713]/50",
                     )}
                   >
                     <Link to={`/leads/${lead._id}`} className="block" draggable={false}>
@@ -152,15 +152,15 @@ export default function PipelinePage() {
                           {lead.score !== undefined ? `Score ${lead.score}` : "Unscored"}
                         </span>
                         {lead.nextFollowUpAt && (
-                          <span className="rounded border border-[#8B5CF6]/25 bg-[#8B5CF6]/[0.08] px-1.5 py-0.5 text-[10px] text-[#c4b5fd]">
+                          <span className="rounded border border-border bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
                             follow-up set
                           </span>
                         )}
                       </div>
                       {lead.score !== undefined && (
-                        <span className="mt-2 block h-0.5 overflow-hidden rounded-full bg-white/[0.07]">
+                        <span className="mt-2 block h-0.5 overflow-hidden rounded-full bg-[#e4dcc9]">
                           <motion.span
-                            className="block h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A855F7]"
+                            className="block h-full rounded-full bg-[#191713]"
                             initial={{ width: 0 }}
                             animate={{ width: `${lead.score}%` }}
                             transition={{ ...SPRING, delay: 0.1 }}

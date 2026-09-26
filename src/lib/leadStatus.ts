@@ -23,15 +23,15 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   lost: "Lost",
 };
 
-/** Spatial status pills — muted neutrals, violet reserved for momentum & wins. */
+/** Status pills — warm neutrals, ink reserved for momentum & wins. */
 export const LEAD_STATUS_CLASSES: Record<LeadStatus, string> = {
-  new: "border border-white/10 bg-white/[0.04] text-muted-foreground",
-  contacted: "border border-[#67E8F9]/25 bg-[#67E8F9]/[0.08] text-[#a5f3fc]",
-  replied: "border border-[#8B5CF6]/30 bg-[#8B5CF6]/[0.10] text-[#c4b5fd]",
-  interested: "border border-[#A855F7]/35 bg-[#A855F7]/[0.12] text-[#d8b4fe]",
-  meeting: "border border-[#FCD34D]/25 bg-[#FCD34D]/[0.08] text-[#fde68a]",
-  won: "border border-[#8B5CF6]/60 bg-gradient-to-r from-[#8B5CF6]/30 to-[#A855F7]/30 text-[#e9d5ff] shadow-[0_0_14px_rgba(139,92,246,0.25)]",
-  lost: "border border-white/[0.06] bg-white/[0.02] text-muted-foreground/70",
+  new: "border border-border bg-card text-muted-foreground",
+  contacted: "border border-border bg-[#ece6d8] text-[#443f36]",
+  replied: "border border-border bg-[#e9e2d2] text-[#3d382f]",
+  interested: "border border-[#c9bfa6] bg-[#e2d9c4] text-[#332f27]",
+  meeting: "border border-[#191713]/30 bg-[#191713]/85 text-[#f7f3ea]",
+  won: "border border-[#191713] bg-[#191713] text-[#f7f3ea] shadow-[0_2px_8px_-3px_rgba(25,23,19,0.5)]",
+  lost: "border border-border bg-transparent text-muted-foreground/60 line-through decoration-border",
 };
 
 export function statusLabel(status: string): string {

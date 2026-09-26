@@ -361,7 +361,7 @@ export default function LeadDetailPage() {
           <section className="rounded-lg border border-border bg-card p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-sm font-semibold">
-                <Sparkles className="size-4" /> Lead intelligence
+                <Sparkles className="size-4 text-muted-foreground" /> Lead intelligence
               </h2>
               {lead.aiGeneratedAt && (
                 <span className="text-[11px] text-muted-foreground">
@@ -427,8 +427,8 @@ export default function LeadDetailPage() {
                 )}
 
                 {lead.approach && (
-                  <div className="mt-5 rounded-md border border-[#8B5CF6]/35 bg-[#8B5CF6]/[0.08] px-3 py-2.5">
-                    <p className="label-caps text-[#c4b5fd]">
+                  <div className="mt-5 rounded-md border border-border bg-secondary px-3 py-2.5">
+                    <p className="label-caps text-muted-foreground">
                       Suggested angle
                     </p>
                     <p className="mt-1 text-sm">{lead.approach}</p>
@@ -497,14 +497,14 @@ export default function LeadDetailPage() {
                         className={cn(
                           "relative mt-1 flex size-[15px] shrink-0 items-center justify-center rounded-full border",
                           f.status === "done"
-                            ? "border-[#8B5CF6] bg-[#8B5CF6]"
+                            ? "border-[#191713] bg-[#191713]"
                             : overdue
                               ? "border-destructive/60 bg-destructive/10"
                               : "border-border bg-background",
                         )}
                       >
                         {f.status === "done" && (
-                          <Check className="size-2.5 text-white" />
+                          <Check className="size-2.5 text-[#f7f3ea]" />
                         )}
                       </span>
                       <div className="min-w-0 flex-1">
@@ -679,7 +679,7 @@ function MessageThread({
                 className={cn(
                   "max-w-[85%] rounded-lg border px-3.5 py-2.5",
                   outbound
-                    ? "ml-auto border-[#8B5CF6]/40 bg-[#8B5CF6]/[0.10]"
+                    ? "ml-auto border-[#191713]/25 bg-[#ece6d8]"
                     : "border-border bg-muted/40",
                 )}
               >

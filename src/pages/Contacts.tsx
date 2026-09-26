@@ -60,7 +60,7 @@ export default function ContactsPage() {
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
-          <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
+          <div className="flex size-11 items-center justify-center rounded-full border border-border bg-secondary text-foreground">
             <Users className="size-5" />
           </div>
           <h2 className="mt-4 text-lg font-semibold tracking-tight">
@@ -82,7 +82,7 @@ export default function ContactsPage() {
             >
               <span
                 aria-hidden
-                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground transition-all duration-200 group-hover:border-[#8B5CF6]/50 group-hover:text-[#c4b5fd] group-hover:shadow-[0_0_12px_rgba(139,92,246,0.3)]"
+                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-xs font-semibold text-muted-foreground transition-colors duration-200 group-hover:border-[#191713]/40 group-hover:text-foreground"
               >
                 {initials(lead.name)}
               </span>

@@ -115,7 +115,7 @@ export default function TemplatesPage() {
 
       {templates.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
-          <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
+          <div className="flex size-11 items-center justify-center rounded-full border border-border bg-secondary text-foreground">
             <BookMarked className="size-5" />
           </div>
           <h2 className="mt-4 text-lg font-semibold tracking-tight">No templates yet.</h2>
@@ -224,7 +224,7 @@ export default function TemplatesPage() {
                     className={
                       "cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-colors " +
                       (form.channel === c
-                        ? "border-[#8B5CF6]/60 bg-[#8B5CF6]/15 text-[#c4b5fd]"
+                        ? "border-[#191713] bg-[#191713] text-[#f7f3ea]"
                         : "border-border text-muted-foreground hover:text-foreground")
                     }
                   >

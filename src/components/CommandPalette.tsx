@@ -52,16 +52,12 @@ export function CommandPalette() {
       <CommandEmpty>No results — try a lead's name or a page.</CommandEmpty>
       <CommandGroup heading="AI actions">
         <CommandItem onSelect={() => go("/research")}>
-          <Sparkles className="size-4 text-[#A855F7]" />
-          <span>
-            <span className="text-[#c4b5fd]">✦</span> Research a lead
-          </span>
+          <Sparkles className="size-4 text-muted-foreground" />
+          <span>Research a lead</span>
         </CommandItem>
         <CommandItem onSelect={() => go("/assistant")}>
-          <Bot className="size-4 text-[#A855F7]" />
-          <span>
-            <span className="text-[#c4b5fd]">✦</span> Ask the AI Assistant
-          </span>
+          <Bot className="size-4 text-muted-foreground" />
+          <span>Ask the AI Assistant</span>
         </CommandItem>
       </CommandGroup>
       <CommandSeparator />

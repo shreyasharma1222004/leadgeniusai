@@ -69,7 +69,7 @@ export default function ResearchPage() {
                   className={
                     "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors " +
                     (industryFilter === ""
-                      ? "bg-[#8B5CF6]/20 text-[#c4b5fd] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)]"
+                      ? "bg-[#191713] text-[#f7f3ea]"
                       : "text-muted-foreground hover:text-foreground")
                   }
                 >
@@ -84,7 +84,7 @@ export default function ResearchPage() {
                     className={
                       "cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors " +
                       (industryFilter === ind
-                        ? "bg-[#8B5CF6]/20 text-[#c4b5fd] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)]"
+                        ? "bg-[#191713] text-[#f7f3ea]"
                         : "text-muted-foreground hover:text-foreground")
                     }
                   >
@@ -97,7 +97,7 @@ export default function ResearchPage() {
 
           {!suggestions ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/60 px-6 py-16 text-center">
-              <div className="flex size-11 items-center justify-center rounded-full border border-[#8B5CF6]/30 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_20px_rgba(139,92,246,0.25)]">
+              <div className="flex size-11 items-center justify-center rounded-full border border-border bg-secondary text-foreground">
                 <Search className="size-5" />
               </div>
               <h2 className="mt-4 text-lg font-semibold tracking-tight">
@@ -130,7 +130,7 @@ export default function ResearchPage() {
                         {s.jobTitle} · {s.company}
                       </p>
                     </div>
-                    <span className="rounded-full border border-[#67E8F9]/25 bg-[#67E8F9]/[0.06] px-2 py-0.5 text-[10px] font-medium text-[#a5f3fc]">
+                    <span className="rounded-full border border-border bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                       {s.industry}
                     </span>
                   </div>
@@ -150,7 +150,7 @@ export default function ResearchPage() {
                       href={`https://www.google.com/search?q=${encodeURIComponent(`${s.company} ${s.location}`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex h-8 items-center gap-1 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:border-[#8B5CF6]/50 hover:text-[#c4b5fd]"
+                      className="flex h-8 items-center gap-1 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:border-[#b9ae93] hover:text-foreground"
                     >
                       <ExternalLink className="size-3" /> Verify
                     </a>

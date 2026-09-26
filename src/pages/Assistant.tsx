@@ -79,7 +79,7 @@ export default function AssistantPage() {
             {turns.length === 0 && (
               <div className="rounded-lg border border-border bg-card p-5">
                 <div className="flex items-center gap-2">
-                  <span className="flex size-8 items-center justify-center rounded-full border border-[#8B5CF6]/40 bg-[#8B5CF6]/15 text-[#c4b5fd] shadow-[0_0_14px_rgba(139,92,246,0.25)]">
+                  <span className="flex size-8 items-center justify-center rounded-full border border-border bg-secondary text-foreground">
                     <Bot className="size-4" />
                   </span>
                   <p className="text-sm font-semibold">Your pipeline, on demand.</p>
@@ -97,12 +97,12 @@ export default function AssistantPage() {
                   className={cn(
                     "max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed sm:max-w-[75%]",
                     turn.role === "user"
-                      ? "border border-[#8B5CF6]/40 bg-[#8B5CF6]/[0.14] text-[#ede9fe]"
+                      ? "border border-[#191713]/30 bg-[#ece6d8]"
                       : "ai-gradient-border rounded-lg",
                   )}
                 >
                   {turn.role === "assistant" && (
-                    <p className="label-caps mb-1.5 flex items-center gap-1.5 text-[#c4b5fd]">
+                    <p className="label-caps mb-1.5 flex items-center gap-1.5 text-muted-foreground">
                       <Sparkles className="size-3" /> DealFlow AI
                     </p>
                   )}
@@ -111,7 +111,7 @@ export default function AssistantPage() {
                     <ul className="mt-2 space-y-1">
                       {turn.bullets.map((b, bi) => (
                         <li key={bi} className="flex gap-2 text-[13px]">
-                          <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8B5CF6]/60" />
+                          <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8a7d63]" />
                           {b}
                         </li>
                       ))}
@@ -126,7 +126,7 @@ export default function AssistantPage() {
                           <Link
                             key={id}
                             to={`/leads/${id}`}
-                            className="rounded-full border border-border bg-white/[0.02] px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-[#8B5CF6]/50 hover:text-[#c4b5fd]"
+                            className="rounded-full border border-border bg-card px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-[#b9ae93] hover:text-foreground"
                           >
                             {lead.name} →
                           </Link>
@@ -155,7 +155,7 @@ export default function AssistantPage() {
                   key={s}
                   type="button"
                   onClick={() => ask(s)}
-                  className="cursor-pointer rounded-full border border-border bg-white/[0.02] px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[#8B5CF6]/50 hover:text-[#c4b5fd]"
+                  className="cursor-pointer rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[#b9ae93] hover:text-foreground"
                 >
                   {s}
                 </button>

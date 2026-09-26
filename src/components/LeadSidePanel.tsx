@@ -107,17 +107,11 @@ export function LeadSidePanel({
 
           {/* Score */}
           {shown.score !== undefined ? (
-            <div className="rounded-xl border border-border bg-white/[0.02] p-4">
+            <div className="rounded-xl border border-border bg-secondary/40 p-4">
               <LeadScoreRing
                 score={shown.score}
                 size={76}
-                label={
-                  shown.score >= 70
-                    ? "High potential"
-                    : shown.score >= 40
-                      ? "Worth pursuing"
-                      : "Needs nurturing"
-                }
+                label="Lead score"
                 breakdown={shown.scoreBreakdown}
               />
             </div>
@@ -136,7 +130,7 @@ export function LeadSidePanel({
               <ul className="space-y-1.5">
                 {shown.painPoints.map((p) => (
                   <li key={p} className="flex gap-2 text-sm">
-                    <span className="mt-2 size-1 shrink-0 rounded-full bg-[#8B5CF6]" />
+                    <span className="mt-2 size-1 shrink-0 rounded-full bg-[#8a7d63]" />
                     {p}
                   </li>
                 ))}
@@ -149,7 +143,7 @@ export function LeadSidePanel({
                 {shown.signals.map((s) => (
                   <span
                     key={s}
-                    className="rounded-full border border-[#67E8F9]/25 bg-[#67E8F9]/[0.06] px-2 py-0.5 text-[11px] text-[#a5f3fc]"
+                    className="rounded-full border border-border bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground"
                   >
                     {s}
                   </span>
@@ -164,7 +158,7 @@ export function LeadSidePanel({
           )}
 
           {/* Contact */}
-          <div className="space-y-2 rounded-xl border border-border bg-white/[0.02] p-4 text-sm">
+          <div className="space-y-2 rounded-xl border border-border bg-secondary/40 p-4 text-sm">
             <ContactRow icon={Mail} label="Email" value={shown.email} />
             <ContactRow icon={Phone} label="Phone" value={shown.phone} />
             <ContactRow icon={Globe} label="Website" value={shown.website} />
@@ -178,9 +172,7 @@ export function LeadSidePanel({
 
           {/* Actions */}
           <div className="sticky bottom-0 flex flex-wrap gap-2 bg-gradient-to-t from-card via-card to-transparent pt-2">
-            <AIButton onClick={() => onCompose(shown)}>
-              <Send className="size-3.5" /> Compose outreach
-            </AIButton>
+            <AIButton onClick={() => onCompose(shown)}>Compose outreach</AIButton>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-9 gap-1.5">

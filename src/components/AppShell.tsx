@@ -88,7 +88,7 @@ function NavList({
           {!collapsed && (
             <p className="label-caps text-muted-foreground/60 px-2 pb-2">{group.section}</p>
           )}
-          {collapsed && <div className="mx-2 mb-2 h-px bg-white/8" />}
+          {collapsed && <div className="mx-2 mb-2 h-px bg-border" />}
           <ul className="flex flex-col gap-1">
             {group.items.map((item) => {
               const Icon = item.icon;
@@ -102,8 +102,8 @@ function NavList({
                         "group relative flex items-center gap-2.5 rounded-lg border border-transparent px-2.5 py-2 text-sm transition-all",
                         collapsed && "justify-center px-0",
                         isActive
-                          ? "nav-pill-active font-medium text-foreground"
-                          : "text-muted-foreground hover:border-white/10 hover:bg-white/[0.04] hover:text-foreground",
+                          ? "nav-pill-active font-medium"
+                          : "text-muted-foreground hover:border-border hover:bg-secondary hover:text-foreground",
                       )
                     }
                   >
@@ -114,13 +114,13 @@ function NavList({
                           transition={{ type: "spring", stiffness: 400, damping: 20 }}
                           className="flex shrink-0"
                         >
-                          <Icon className={cn("size-4", isActive && "text-[#c4b5fd]")} />
+                          <Icon className={cn("size-4", isActive && "text-[#f7f3ea]")} />
                         </motion.span>
                         {!collapsed && <span className="truncate">{item.label}</span>}
                         {isActive && (
                           <motion.span
                             layoutId="nav-underline"
-                            className="absolute -left-3 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#8B5CF6]"
+                            className="absolute -left-3 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#191713]"
                             transition={{ type: "spring", stiffness: 350, damping: 30 }}
                           />
                         )}
@@ -145,17 +145,17 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
   const initial = name.slice(0, 1).toUpperCase();
 
   return (
-    <div className={cn("border-t border-white/8 px-3 py-3", collapsed && "flex justify-center px-0")}>
+    <div className={cn("border-t border-border px-3 py-3", collapsed && "flex justify-center px-0")}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
             className={cn(
-              "group flex w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent p-1.5 transition-all hover:border-white/10 hover:bg-white/[0.04]",
+              "group flex w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent p-1.5 transition-all hover:border-border hover:bg-secondary",
               collapsed && "w-auto",
             )}
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-[#8B5CF6]/40 bg-gradient-to-br from-[#8B5CF6]/35 to-[#A855F7]/15 text-[11px] font-semibold text-[#e2d9ff] transition-shadow group-hover:shadow-[0_0_14px_-2px_rgba(139,92,246,0.5)]">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-[#191713] text-[11px] font-semibold text-[#f7f3ea]">
               {initial}
             </span>
             {!collapsed && (
@@ -166,7 +166,7 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
             )}
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="start" className="depth-pop w-52 border-white/10">
+        <DropdownMenuContent side="top" align="start" className="depth-pop w-52">
           <DropdownMenuLabel className="text-xs">
             {name}
             <span className="block truncate font-normal text-muted-foreground">{email}</span>
@@ -213,17 +213,17 @@ function NotificationsButton() {
         <button
           type="button"
           aria-label="Notifications"
-          className="relative flex size-8 cursor-pointer items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-all hover:border-white/10 hover:bg-white/[0.04] hover:text-foreground"
+          className="relative flex size-8 cursor-pointer items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border hover:bg-secondary hover:text-foreground"
         >
           <Bell className="size-4" />
           {count > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-[#8B5CF6] text-[9px] font-semibold text-white shadow-[0_0_10px_rgba(139,92,246,0.7)]">
+            <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-[#191713] text-[9px] font-semibold text-[#f7f3ea]">
               {count > 9 ? "9+" : count}
             </span>
           )}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="depth-pop w-80 border-white/10">
+      <DropdownMenuContent align="end" className="depth-pop w-80">
         <p className="label-caps px-3 pb-1 pt-2 text-muted-foreground/70">Today</p>
         {unread.slice(0, 3).map((m) => (
           <DropdownMenuItem
@@ -234,7 +234,7 @@ function NotificationsButton() {
             }}
             className="cursor-pointer gap-2"
           >
-            <span className="size-1.5 shrink-0 rounded-full bg-[#8B5CF6]" />
+            <span className="size-1.5 shrink-0 rounded-full bg-[#191713]" />
             <span className="truncate text-xs">
               <span className="font-medium">{leadName(m.leadId)}</span> replied to your message
             </span>
@@ -249,7 +249,7 @@ function NotificationsButton() {
             }}
             className="cursor-pointer gap-2"
           >
-            <CalendarClock className="size-3.5 shrink-0 text-[#A855F7]" />
+            <CalendarClock className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="truncate text-xs">
               Follow up with <span className="font-medium">{leadName(f.leadId)}</span> is due
             </span>
@@ -286,7 +286,7 @@ function ExpandableSearch() {
       layout
       transition={{ type: "spring", stiffness: 320, damping: 30 }}
       className={cn(
-        "flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 transition-colors focus-within:border-[#8B5CF6]/50",
+        "flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 transition-colors focus-within:border-[#191713]/50",
         expanded ? "w-64" : "w-36 cursor-pointer",
       )}
       onClick={() => !expanded && setExpanded(true)}
@@ -309,7 +309,7 @@ function ExpandableSearch() {
         <span className="text-xs text-muted-foreground">Search</span>
       )}
       {expanded && (
-        <kbd className="hidden shrink-0 rounded border border-white/10 px-1 text-[9px] text-muted-foreground sm:block">
+        <kbd className="hidden shrink-0 rounded border border-border px-1 text-[9px] text-muted-foreground sm:block">
           ↵
         </kbd>
       )}
@@ -340,7 +340,7 @@ export function AppShell({
       <motion.aside
         animate={{ width: collapsed ? 60 : 236 }}
         transition={{ type: "spring", stiffness: 300, damping: 32 }}
-        className="sticky top-0 z-20 hidden h-screen shrink-0 flex-col border-r border-white/6 bg-sidebar/80 backdrop-blur-xl md:flex"
+        className="sticky top-0 z-20 hidden h-screen shrink-0 flex-col border-r border-border bg-sidebar md:flex"
       >
         <div className={cn("flex h-14 items-center gap-2 px-4", collapsed && "justify-center px-0")}>
           <img src={logo} alt="DealFlow AI" className="size-7 rounded-md" />
@@ -353,7 +353,7 @@ export function AppShell({
                 transition={{ duration: 0.18 }}
                 className="whitespace-nowrap text-sm font-semibold tracking-tight"
               >
-                DealFlow<span className="text-[#A855F7]"> AI</span>
+                DealFlow<span className="font-normal text-muted-foreground"> AI</span>
               </motion.span>
             )}
           </AnimatePresence>
@@ -366,7 +366,7 @@ export function AppShell({
           type="button"
           onClick={() => setCollapsed((c) => !c)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="absolute -right-3 top-16 z-10 flex size-6 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-card text-muted-foreground transition-all hover:border-[#8B5CF6]/50 hover:text-foreground hover:shadow-[0_0_14px_-2px_rgba(139,92,246,0.6)]"
+          className="absolute -right-3 top-16 z-10 flex size-6 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-all hover:border-[#191713]/50 hover:text-foreground"
         >
           <ChevronLeft className={cn("size-3.5 transition-transform duration-300", collapsed && "rotate-180")} />
         </button>
@@ -374,7 +374,7 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-white/6 bg-background/70 px-4 backdrop-blur-xl md:px-6">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/85 px-4 backdrop-blur md:px-6">
           <div className="flex items-center gap-3">
             {/* Mobile brand + drawer */}
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -383,10 +383,10 @@ export function AppShell({
                   <Menu className="size-4" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-72 border-white/10 bg-sidebar p-0">
-                <SheetTitle className="flex h-14 items-center gap-2 border-b border-white/8 px-4 text-sm font-semibold">
+              <SheetContent side="left" className="w-72 border-border bg-sidebar p-0">
+                <SheetTitle className="flex h-14 items-center gap-2 border-b border-border px-4 text-sm font-semibold">
                   <img src={logo} alt="" className="size-7 rounded-md" />
-                  DealFlow<span className="text-[#A855F7]"> AI</span>
+                  DealFlow<span className="font-normal text-muted-foreground"> AI</span>
                 </SheetTitle>
                 <div className="flex h-[calc(100%-3.5rem)] flex-col">
                   <div className="flex-1 overflow-y-auto py-4">
@@ -407,12 +407,12 @@ export function AppShell({
               type="button"
               onClick={() => navigate("/assistant")}
               aria-label="Open AI Assistant"
-              className="hidden size-8 cursor-pointer items-center justify-center rounded-lg border border-[#8B5CF6]/30 bg-[#8B5CF6]/10 text-[#c4b5fd] transition-all hover:border-[#8B5CF6]/60 hover:shadow-[0_0_16px_-4px_rgba(139,92,246,0.7)] sm:flex"
+              className="hidden size-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-card text-foreground transition-colors hover:bg-secondary sm:flex"
             >
               <Bot className="size-4" />
             </button>
             <NotificationsButton />
-            <kbd className="ml-1 hidden items-center gap-0.5 rounded-md border border-white/10 bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-muted-foreground lg:flex">
+            <kbd className="ml-1 hidden items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground lg:flex">
               ⌘K
             </kbd>
           </div>
