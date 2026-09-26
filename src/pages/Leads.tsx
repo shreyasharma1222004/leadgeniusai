@@ -2,6 +2,7 @@ import { AddLeadDialog } from "@/components/AddLeadDialog";
 import { ImportCsvDialog } from "@/components/ImportCsvDialog";
 import { AppShell } from "@/components/AppShell";
 import { LeadSidePanel } from "@/components/LeadSidePanel";
+import { useAnalyzeLead } from "@/lib/leads-client";
 import { OutreachComposer } from "@/components/OutreachComposer";
 import { AIButton, SPRING_SOFT, TiltCard } from "@/components/spatial";
 import { Button } from "@/components/ui/button";
@@ -751,9 +752,9 @@ function useLeadMutations() {
   const bulkSetStatus = useMutation(api.leads.bulkSetStatus);
   const bulkDelete = useMutation(api.leads.bulkDelete);
   const saveAnalysis = useMutation(api.leads.saveAnalysis);
+  const analyzeLead = useAnalyzeLead();
 
   const analyze = async (lead: Doc2) => {
-    const { analyzeLead } = await import("@/lib/leads-client");
     toast("Analyzing lead…", { description: "Reading context and scoring." });
     try {
       const result = await analyzeLead({

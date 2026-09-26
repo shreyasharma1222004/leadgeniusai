@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { formatDateTime, initials, timeAgo } from "@/lib/format";
-import { analyzeLead } from "@/lib/leads-client";
+import { useAnalyzeLead } from "@/lib/leads-client";
 import { money, nextBestAction } from "@/lib/growth";
 import { defaultProbability, weightedValue } from "@/lib/leadStatus";
 import { useEffect, useMemo } from "react";
@@ -80,6 +80,7 @@ export default function LeadDetailPage() {
   const setStatus = useMutation(api.leads.setStatus);
   const updateDeal = useMutation(api.leads.updateDeal);
   const addNote = useMutation(api.leads.addNote);
+  const analyzeLead = useAnalyzeLead();
   const removeLead = useMutation(api.leads.remove);
   const markContacted = useMutation(api.leads.markContacted);
   const scheduleFollowUp = useMutation(api.leads.scheduleFollowUp);

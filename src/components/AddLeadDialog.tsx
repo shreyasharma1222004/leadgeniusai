@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
-import { analyzeLead } from "@/lib/leads-client";
+import { useAnalyzeLead } from "@/lib/leads-client";
 import { cn } from "@/lib/utils";
 import { useMutation } from "convex/react";
 import {
@@ -103,6 +103,7 @@ export function AddLeadDialog({
 
   const createLead = useMutation(api.leads.create);
   const saveAnalysis = useMutation(api.leads.saveAnalysis);
+  const analyzeLead = useAnalyzeLead();
 
   const set = (key: keyof FormState) => (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,

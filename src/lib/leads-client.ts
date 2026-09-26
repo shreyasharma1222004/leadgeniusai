@@ -1,14 +1,15 @@
-"use client";
-
 /**
  * AI service abstraction (client-side).
  *
- * The whole app talks to `analyzeLead` through this one interface, so the
- * provider can be swapped without touching product code. If OPENAI_API_KEY
- * is configured in the environment, we call the OpenAI Chat Completions API
- * directly from the browser; otherwise we return `ok: false` and the UI
- * falls back to the built-in deterministic heuristic analysis.
+ * Lead analysis runs server-side: `useAnalyzeLead()` wraps the Convex action
+ * in src/convex/ai.ts, which reads process.env.OPENAI_API_KEY at request
+ * time. No API key exists in this module — nothing AI-related is exposed to
+ * the browser. When the action returns null (no key configured, provider
+ * error, or unparseable output) we fall back to the built-in deterministic
+ * heuristic analysis, so the product keeps working with zero external calls.
  */
+import { api } from "@/convex/_generated/api";
+import { useAction } from "convex/react";
 
 export interface AnalyzeLeadInput {
   name: string;
@@ -32,102 +33,35 @@ export interface LeadAnalysis {
   provider: "openai" | "heuristic";
 }
 
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+/**
+ * React hook returning an analyze function. Server-side GPT brief when
+ * OPENAI_API_KEY is configured on the Convex deployment, otherwise the local
+ * heuristic estimate. Never throws for provider issues — failures degrade to
+ * the heuristic so the UI flow always completes.
+ */
+export function useAnalyzeLead() {
+  const runAnalysis = useAction(api.ai.analyzeLead);
 
-function buildPrompt(lead: AnalyzeLeadInput): string {
-  const parts = [
-    lead.name,
-    lead.jobTitle,
-    lead.company,
-    lead.website,
-    lead.industry,
-    lead.location,
-    lead.notes,
-  ]
-    .filter(Boolean)
-    .join(" | ");
-  return [
-    "You are a B2B sales research analyst. Based ONLY on the information provided,",
-    "produce a short research brief a freelancer could use before outreach.",
-    "Never fabricate facts — if information is missing, say what is unknown.",
-    "Respond with strict JSON matching this shape:",
-    '{"summary": string, "industry": string, "painPoints": string[3], "signals": string[3], "approach": string,',
-    ' "score": number(0-100), "scoreBreakdown": [{"label": "Company fit", "value": number}, {"label": "Industry fit", "value": number}, {"label": "Engagement", "value": number}, {"label": "Opportunity signals", "value": number}]}',
-    "",
-    `Lead: ${parts}`,
-  ].join("\n");
-}
-
-export async function analyzeLead(lead: AnalyzeLeadInput): Promise<LeadAnalysis> {
-  const key = import.meta.env.VITE_OPENAI_API_KEY;
-  if (key) {
+  return async (lead: AnalyzeLeadInput): Promise<LeadAnalysis> => {
     try {
-      const res = await fetch(OPENAI_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          response_format: { type: "json_object" },
-          messages: [{ role: "user", content: buildPrompt(lead) }],
-          temperature: 0.4,
-          max_tokens: 700,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const parsed = parseAnalysis(data?.choices?.[0]?.message?.content ?? "");
-        if (parsed) return { ...parsed, provider: "openai" };
-      }
+      const result = await runAnalysis(lead);
+      if (result) return result;
     } catch {
       // fall through to heuristic
     }
-  }
-  return { ...heuristicAnalysis(lead), provider: "heuristic" };
-}
-
-function parseAnalysis(raw: string): Omit<LeadAnalysis, "provider"> | null {
-  try {
-    const obj = JSON.parse(raw) as Record<string, unknown>;
-    const asStringArray = (value: unknown, fallback: string[]): string[] =>
-      Array.isArray(value) && value.every((v) => typeof v === "string")
-        ? (value as string[])
-        : fallback;
-    const summary = typeof obj.summary === "string" ? obj.summary : "";
-    if (!summary) return null;
-    const scoreRaw = typeof obj.score === "number" ? obj.score : 60;
-    return {
-      summary: summary.slice(0, 400),
-      industry: typeof obj.industry === "string" ? obj.industry : "",
-      painPoints: asStringArray(obj.painPoints, []).slice(0, 5),
-      signals: asStringArray(obj.signals, []).slice(0, 5),
-      approach: typeof obj.approach === "string" ? obj.approach : "",
-      score: Math.max(0, Math.min(100, Math.round(scoreRaw))),
-      scoreBreakdown: Array.isArray(obj.scoreBreakdown)
-        ? (obj.scoreBreakdown as { label: string; value: number }[])
-            .filter(
-              (d) => typeof d?.label === "string" && typeof d?.value === "number",
-            )
-            .slice(0, 4)
-        : [],
-    };
-  } catch {
-    return null;
-  }
+    return heuristicAnalysis(lead);
+  };
 }
 
 // ── Deterministic fallback ────────────────────────────────────────────────
 // Estimates a research brief from the data you entered — never invents facts.
 
-export function heuristicAnalysis(lead: AnalyzeLeadInput): Omit<LeadAnalysis, "provider"> {
+export function heuristicAnalysis(lead: AnalyzeLeadInput): Omit<LeadAnalysis, "provider"> & { provider: "heuristic" } {
   const title = lead.jobTitle?.toLowerCase() ?? "";
   const decisionMaker =
     /founder|ceo|owner|director|vp|president|head|chief|partner/.test(title);
   const hasCompany = Boolean(lead.company?.trim());
   const hasWebsite = Boolean(lead.website?.trim());
-  const hasEmail = false; // not part of analysis input
   const hasNotes = Boolean(lead.notes?.trim());
   const industry =
     lead.industry?.trim() || (hasCompany ? "to be confirmed" : "unknown");
@@ -179,6 +113,7 @@ export function heuristicAnalysis(lead: AnalyzeLeadInput): Omit<LeadAnalysis, "p
       { label: "Engagement", value: engagement },
       { label: "Opportunity signals", value: signalsScore },
     ],
+    provider: "heuristic",
   };
 }
 

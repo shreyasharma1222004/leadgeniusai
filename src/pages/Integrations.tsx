@@ -58,10 +58,10 @@ export default function IntegrationsPage() {
       icon: Sparkles,
       name: "OpenAI — GPT research briefs",
       status: "keys-needed",
-      envVar: "VITE_OPENAI_API_KEY",
+      envVar: "OPENAI_API_KEY (server-side Convex env var)",
       description:
         "Upgrades lead analysis from the built-in heuristic engine to real GPT-4o-mini research briefs.",
-      how: "Add the key and every new analysis is model-generated. Without it, the deterministic estimator still scores leads from your own data.",
+      how: "Set OPENAI_API_KEY in your Convex environment variables (server-side only — the key never touches the browser). Every analysis then runs through the backend. Without it, the deterministic estimator still scores leads from your own data.",
     },
     {
       icon: Bot,
@@ -300,9 +300,9 @@ export default function IntegrationsPage() {
         <Plug className="mt-0.5 size-4 shrink-0" />
         <p>
           Keys are read server-side from environment variables and never exposed
-          in the client bundle (the OpenAI key is the one exception by design
-          and stays browser-side for direct calls). Gmail, Outlook and LinkedIn
-          sync remain on the roadmap; the copy-and-send flow covers them today.
+          in the client bundle — including the OpenAI key, which lives only in
+          your Convex environment variables. Gmail, Outlook and LinkedIn sync
+          remain on the roadmap; the copy-and-send flow covers them today.
         </p>
       </div>
 
