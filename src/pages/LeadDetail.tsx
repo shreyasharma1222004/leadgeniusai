@@ -43,6 +43,7 @@ import {
   Loader2,
   Mail,
   MapPin,
+  Megaphone,
   MessagesSquare,
   Pencil,
   Phone,
@@ -50,6 +51,7 @@ import {
   Sparkles,
   Globe,
   StickyNote,
+  Tag,
   Trophy,
   X,
 } from "lucide-react";
@@ -334,6 +336,8 @@ export default function LeadDetailPage() {
                 value={lead.website}
               />
               <ContactRow icon={MapPin} label="Location" value={lead.location} />
+              <ContactRow icon={Tag} label="Source" value={lead.source} />
+              <CampaignRow campaignId={lead.campaignId} />
               <div className="flex items-start gap-2">
                 <dt className="label-caps w-16 shrink-0 pt-1 text-muted-foreground/70">
                   Status
@@ -1205,6 +1209,30 @@ function ContactRow({
           value
         ) : (
           <span className="text-muted-foreground/60">—</span>
+        )}
+      </dd>
+    </div>
+  );
+}
+
+/** Campaign attribution (§8) — shown only when real attribution exists. The
+ *  name resolves through an ownership-checked query; a deleted or inaccessible
+ *  campaign degrades to an honest "Campaign-linked" label, never a guess. */
+function CampaignRow({ campaignId }: { campaignId?: Id<"campaigns"> }) {
+  const name = useQuery(
+    api.campaigns.getName,
+    campaignId ? { id: campaignId } : "skip",
+  );
+  return (
+    <div className="flex items-start gap-2">
+      <dt className="label-caps flex w-16 shrink-0 items-center gap-1 pt-1 text-muted-foreground/70">
+        <Megaphone className="size-3" /> Campaign
+      </dt>
+      <dd className="min-w-0 flex-1 truncate text-sm">
+        {campaignId === undefined ? (
+          <span className="text-muted-foreground/60">No campaign attribution</span>
+        ) : (
+          name ?? "Campaign-linked"
         )}
       </dd>
     </div>

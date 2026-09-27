@@ -57,6 +57,23 @@ export const getWithLeads = query({
 
 // ── Mutations ──────────────────────────────────────────────────────────────
 
+/**
+ * Name-only campaign lookup for attribution display (Deal Detail §8).
+ * Lightweight alternative to getWithLeads: returns just the name so the deal
+ * page can show which campaign sourced a lead without subscribing to every
+ * recipient row. Null when signed out, not owned, or deleted.
+ */
+export const getName = query({
+  args: { id: v.id("campaigns") },
+  handler: async (ctx, { id }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
+    const campaign = await ctx.db.get(id);
+    if (!campaign || campaign.userId !== userId) return null;
+    return campaign.name;
+  },
+});
+
 export const create = mutation({
   args: {
     name: v.string(),
