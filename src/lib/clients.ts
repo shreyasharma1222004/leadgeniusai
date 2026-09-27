@@ -156,8 +156,10 @@ function retentionOf(client: ClientBaseWithExpansion): Client["retention"] {
   if (quietDays !== undefined && quietDays >= REVENUE_THRESHOLDS.clientInactiveDays) {
     return {
       state: "at_risk",
+      // Careful wording: inactivity is a measurable signal worth acting on —
+      // NOT a churn prediction. The UI explains this distinction (§17/§18).
       evidence: [
-        `No recorded activity for ${quietDays} days`,
+        `No recorded activity for ${quietDays} days — worth reaching out, though this is an inactivity signal, not a churn prediction`,
         ...evidence,
       ],
     };

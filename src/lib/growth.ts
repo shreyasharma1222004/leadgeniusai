@@ -84,12 +84,61 @@ type FollowUp = { _id: string; leadId: string; dueAt: number; status: string; no
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * Currency formatting for deal values — THE single money formatter (Phase 2
+ * cleanup item 2). Every page must render money through this function rather
+ * than hardcoding a symbol, so formatting can never disagree between pages.
+ *
+ * `currency` is an ISO 4217 code (e.g. "USD", "EUR", "INR", "GBP"). The
+ * business profile's saved currency is the workspace default; callers pass it
+ * through from their profile query.
+ *
+ * Neutral fallback: when no currency is known (profile not set up, or an old
+ * deal without one), amounts render with the documented neutral marker "¤"
+ * (the ISO generic-currency sign) — an explicit "currency unspecified" state,
+ * NOT an invented default. Underlying numbers are never altered.
+ *
+ * Compact for large numbers (1.2M / 450k), identical to the pre-currency
+ * format apart from the symbol.
+ */
+export const NEUTRAL_CURRENCY = "¤";
+
+/** Symbols for the currencies the product already represents. */
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  INR: "₹",
+  CAD: "CA$",
+  AUD: "A$",
+  JPY: "¥",
+  CHF: "CHF ",
+  SEK: "kr ",
+  NOK: "kr ",
+  DKK: "kr ",
+  BRL: "R$",
+  MXN: "MX$",
+  ZAR: "R ",
+  SGD: "S$",
+  NZD: "NZ$",
+  AED: "AED ",
+};
+
+/** Resolve a currency code to its display symbol (neutral marker if unknown). */
+export function currencySymbol(currency: string | undefined | null): string {
+  if (!currency) return NEUTRAL_CURRENCY;
+  const code = currency.trim().toUpperCase();
+  if (!code) return NEUTRAL_CURRENCY;
+  return CURRENCY_SYMBOLS[code] ?? `${code} `;
+}
+
 /** Currency formatting for deal values. Compact for large numbers. */
-export function money(n: number | undefined): string {
+export function money(n: number | undefined, currency?: string | null): string {
   if (n === undefined || n === null) return "—";
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (Math.abs(n) >= 1_000) return `$${Math.round(n / 1_000)}k`;
-  return `$${n.toLocaleString()}`;
+  const sym = currencySymbol(currency);
+  if (Math.abs(n) >= 1_000_000) return `${sym}${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (Math.abs(n) >= 1_000) return `${sym}${Math.round(n / 1_000)}k`;
+  return `${sym}${n.toLocaleString()}`;
 }
 
 // ── Core metrics (§7) — every number derived from actual records ────────────

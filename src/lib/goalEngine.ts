@@ -224,17 +224,38 @@ export function computeGoalCurrent(
 /**
  * Compact currency formatting for goal values. Kept local (rather than
  * importing from growth.ts) because goalEngine is bundled server-side too —
- * mirrors money() in growth.ts exactly.
+ * mirrors money() in growth.ts exactly, including the Phase 2 currency
+ * parameter and the neutral "¤" fallback for an unset workspace currency.
  */
-function moneyCompact(n: number): string {
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (Math.abs(n) >= 1_000) return `$${Math.round(n / 1_000)}k`;
-  return `$${n.toLocaleString()}`;
+const NEUTRAL_CURRENCY = "¤";
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  INR: "₹",
+  CAD: "CA$",
+  AUD: "A$",
+  JPY: "¥",
+};
+
+function moneyCompact(n: number, currency?: string | null): string {
+  let sym = NEUTRAL_CURRENCY;
+  if (currency) {
+    const code = currency.trim().toUpperCase();
+    if (code) sym = CURRENCY_SYMBOLS[code] ?? `${code} `;
+  }
+  if (Math.abs(n) >= 1_000_000) return `${sym}${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (Math.abs(n) >= 1_000) return `${sym}${Math.round(n / 1_000)}k`;
+  return `${sym}${n.toLocaleString()}`;
 }
 
 /** Format a goal value per its unit (money/percent/count). */
-export function formatGoalValue(value: number, unit: GoalUnit): string {
-  if (unit === "money") return moneyCompact(value);
+export function formatGoalValue(
+  value: number,
+  unit: GoalUnit,
+  currency?: string | null,
+): string {
+  if (unit === "money") return moneyCompact(value, currency);
   if (unit === "percent") return `${value}%`;
   return value.toLocaleString();
 }

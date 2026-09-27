@@ -9,6 +9,7 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import { money } from "@/lib/growth";
+import { dealCurrency } from "@/lib/revenue";
 import { timeAgo } from "@/lib/format";
 import {
   LEAD_STATUS_LABELS,
@@ -46,6 +47,8 @@ export default function PipelinePage() {
   const migrateStatuses = useMutation(api.leads.migrateStatuses);
   const history = useQuery(api.leads.stageHistoryForUser, {});
   const proposals = useQuery(api.proposals.list, {});
+  const profile = useQuery(api.business.myProfile, {});
+  const workspaceCurrency = profile?.currency ?? undefined;
   const [dragId, setDragId] = useState<Id<"leads"> | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -162,6 +165,7 @@ export default function PipelinePage() {
 
   // Column totals — computed on the UNFILTERED open set so header money stays
   // true regardless of view filters (§27: one definition everywhere).
+  // Currency: workspace default; per-deal overrides only apply per card.
   const colTotal = (status: string) =>
     leads
       .filter((l) => canonicalStatus(l.status) === status)
@@ -182,10 +186,10 @@ export default function PipelinePage() {
       actions={
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span className="hidden sm:inline">
-            Open pipeline <span className="tabular font-semibold text-foreground">{money(pipelineTotal)}</span>
+            Open pipeline <span className="tabular font-semibold text-foreground">{money(pipelineTotal, workspaceCurrency)}</span>
           </span>
           <span className="hidden md:inline">
-            Weighted <span className="tabular font-semibold text-foreground">{money(weightedTotal)}</span>
+            Weighted <span className="tabular font-semibold text-foreground">{money(weightedTotal, workspaceCurrency)}</span>
             <span className="ml-1 text-[10px] text-muted-foreground/60">(estimate)</span>
           </span>
           <Button
@@ -201,8 +205,8 @@ export default function PipelinePage() {
       }
     >
       <p className="-mt-3 mb-4 text-sm text-muted-foreground">
-        Drag cards between stages. Click the value pill on a card to set deal value, probability and
-        expected close date.
+        Every card is one record moving Lead → Opportunity → Deal → Won. Click the value pill on a
+        card to set deal value, probability and expected close date.
       </p>
 
       {filtersOpen && (
@@ -281,7 +285,7 @@ export default function PipelinePage() {
                 </div>
                 {colTotal(status) > 0 && (
                   <p className="tabular mt-1 text-[11px] text-muted-foreground">
-                    {money(colTotal(status))}
+                    {money(colTotal(status), workspaceCurrency)}
                   </p>
                 )}
               </div>
@@ -308,6 +312,7 @@ export default function PipelinePage() {
                         toast.error("Couldn't save — try again.");
                       }
                     }}
+                    currency={dealCurrency(lead, workspaceCurrency)}
                   />
                 ))}
               </div>
@@ -328,6 +333,7 @@ function DealCard({
   onSaveDeal,
   proposalPending,
   lastStageAt,
+  currency,
 }: {
   lead: Lead;
   dragging: boolean;
@@ -340,6 +346,7 @@ function DealCard({
   }) => Promise<void>;
   proposalPending: boolean;
   lastStageAt?: number;
+  currency?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(lead.dealValue?.toString() ?? "");
@@ -425,13 +432,13 @@ function DealCard({
               )}
             >
               <CircleDollarSign className="size-3" />
-              {lead.dealValue !== undefined ? money(lead.dealValue) : "Value"}
+              {lead.dealValue !== undefined ? money(lead.dealValue, currency) : "Value"}
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-64 p-3" onClick={(e) => e.stopPropagation()}>
             <div className="grid gap-2.5">
               <div className="grid gap-1">
-                <Label htmlFor={`dv-${lead._id}`} className="text-xs">Deal value ($)</Label>
+                <Label htmlFor={`dv-${lead._id}`} className="text-xs">Deal value</Label>
                 <Input
                   id={`dv-${lead._id}`}
                   value={value}

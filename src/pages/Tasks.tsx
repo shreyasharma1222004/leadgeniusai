@@ -1,5 +1,15 @@
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import { formatDateTime, timeAgo } from "@/lib/format";
@@ -16,7 +26,13 @@ export default function TasksPage() {
   const followUps = useQuery(api.followUps.listForUser, {});
   const stats = useQuery(api.followUps.stats, {});
   const setFollowUpStatus = useMutation(api.leads.setFollowUpStatus);
+  // Phase 2 cleanup item 5: wire the EXISTING updateFollowUp mutation into the
+  // existing task list — a small inline reschedule, not a new task system.
+  const updateFollowUp = useMutation(api.leads.updateFollowUp);
   const [filter, setFilter] = useState<Filter>("overdue");
+  const [rescheduleId, setRescheduleId] = useState<string | null>(null);
+  const [rescheduleAt, setRescheduleAt] = useState("");
+  const [rescheduleNote, setRescheduleNote] = useState("");
 
   if (followUps === undefined || stats === undefined) {
     return (
@@ -58,6 +74,28 @@ export default function TasksPage() {
       toast(status === "done" ? "Follow-up completed" : status === "skipped" ? "Skipped" : "Reopened");
     } catch {
       toast.error("Couldn't update that task — try again.");
+    }
+  };
+
+  const saveReschedule = async () => {
+    if (!rescheduleId || !rescheduleAt) return;
+    const ts = new Date(rescheduleAt).getTime();
+    if (Number.isNaN(ts)) {
+      toast.error("Pick a valid date and time.");
+      return;
+    }
+    try {
+      await updateFollowUp({
+        id: rescheduleId as never,
+        dueAt: ts,
+        note: rescheduleNote.trim() || undefined,
+      });
+      toast("Follow-up rescheduled");
+      setRescheduleId(null);
+      setRescheduleAt("");
+      setRescheduleNote("");
+    } catch {
+      toast.error("Couldn't reschedule — try again.");
     }
   };
 
@@ -166,6 +204,22 @@ export default function TasksPage() {
                         variant="ghost"
                         size="sm"
                         className="h-7 gap-1 text-xs"
+                        onClick={() => {
+                          setRescheduleId(f._id);
+                          setRescheduleAt(
+                            new Date(f.dueAt - new Date().getTimezoneOffset() * 60000)
+                              .toISOString()
+                              .slice(0, 16),
+                          );
+                          setRescheduleNote(f.note ?? "");
+                        }}
+                      >
+                        <CalendarClock className="size-3" /> Reschedule
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 text-xs"
                         onClick={() => void update(f._id, "skipped")}
                       >
                         <X className="size-3" /> Skip
@@ -192,6 +246,46 @@ export default function TasksPage() {
           })}
         </div>
       )}
+
+      {/* Inline reschedule dialog — uses the existing updateFollowUp mutation */}
+      <Dialog open={rescheduleId !== null} onOpenChange={(open) => !open && setRescheduleId(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reschedule follow-up</DialogTitle>
+            <DialogDescription>
+              Moves this task to a new time. The lead's next scheduled activity updates with it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="rs-at">When</Label>
+              <Input
+                id="rs-at"
+                type="datetime-local"
+                value={rescheduleAt}
+                onChange={(e) => setRescheduleAt(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="rs-note">Note (optional)</Label>
+              <Input
+                id="rs-note"
+                value={rescheduleNote}
+                onChange={(e) => setRescheduleNote(e.target.value)}
+                placeholder="What's the angle?"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRescheduleId(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void saveReschedule()} disabled={!rescheduleAt}>
+              Reschedule
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

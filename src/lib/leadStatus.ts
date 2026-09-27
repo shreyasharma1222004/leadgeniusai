@@ -148,3 +148,17 @@ export function isQualified(status: string): boolean {
     canonicalStatus(status),
   );
 }
+
+/**
+ * Lifecycle label (Phase 2 cleanup item 6) — makes the record's role in the
+ * Lead → Opportunity → Deal → Client journey explicit so UI copy never
+ * conflates a raw lead with an active deal or a won customer. Same canonical
+ * stage mapping as everywhere else; purely a labeling helper.
+ */
+export function lifecycleLabel(status: string): string {
+  const s = canonicalStatus(status);
+  if (s === "won") return "Won · client";
+  if (s === "lost") return "Closed · lost";
+  if (s === "discovery" || s === "proposal" || s === "interested") return "Active deal";
+  return "Lead";
+}

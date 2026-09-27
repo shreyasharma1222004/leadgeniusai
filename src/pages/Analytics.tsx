@@ -10,6 +10,7 @@ import {
   computeClosedStats,
   computeForecast,
   computePipelineStats,
+  dealCurrency,
   dealFlags,
   dealTitle,
   pipelineAging,
@@ -33,6 +34,8 @@ export default function AnalyticsPage() {
   const campaigns = useQuery(api.campaigns.list, {});
   const followUps = useQuery(api.followUps.listForUser, {});
   const history = useQuery(api.leads.stageHistoryForUser, {});
+  const profile = useQuery(api.business.myProfile, {});
+  const workspaceCurrency = profile?.currency ?? undefined;
   const [breakdown, setBreakdown] = useState<"source" | "campaign" | "industry" | "company" | "stage">("source");
 
   const ready =
@@ -66,7 +69,13 @@ export default function AnalyticsPage() {
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
   const thisMonth = wonRevenueInPeriod(leads, monthStart.getTime());
-  const breakdownRows = revenueBreakdown(leads, breakdown);
+  // Campaign names for attribution breakdown — REAL relationships only (the
+  // campaignId stamped on deals at send time); no fabricated attribution.
+  const campaignNames = useMemo(
+    () => new Map((campaigns ?? []).map((c) => [c._id, c.name])),
+    [campaigns],
+  );
+  const breakdownRows = revenueBreakdown(leads, breakdown, campaignNames);
 
   const exportCsv = () => {
     if (leads.length === 0) {
@@ -215,28 +224,28 @@ export default function AnalyticsPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <TiltCard className="p-4">
                 <p className="label-caps text-muted-foreground/70">Pipeline value</p>
-                <p className="tabular mt-2 text-3xl font-semibold tracking-tight">{money(pipeline.pipelineValue)}</p>
+                <p className="tabular mt-2 text-3xl font-semibold tracking-tight">{money(pipeline.pipelineValue, workspaceCurrency)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Sum of open deal values · {pipeline.openDeals} open ({pipeline.openOpportunities} in-pipeline)
                 </p>
               </TiltCard>
               <TiltCard className="p-4">
                 <p className="label-caps text-muted-foreground/70">Weighted pipeline</p>
-                <p className="tabular mt-2 text-3xl font-semibold tracking-tight">{money(pipeline.weightedPipeline)}</p>
+                <p className="tabular mt-2 text-3xl font-semibold tracking-tight">{money(pipeline.weightedPipeline, workspaceCurrency)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Estimate based on current deal probabilities
                 </p>
               </TiltCard>
               <TiltCard className="p-4">
                 <p className="label-caps text-muted-foreground/70">Won revenue</p>
-                <p className="tabular mt-2 text-3xl font-semibold tracking-tight text-[#53634a]">{money(closed.wonRevenue)}</p>
+                <p className="tabular mt-2 text-3xl font-semibold tracking-tight text-[#53634a]">{money(closed.wonRevenue, workspaceCurrency)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Actual closed · {closed.wonCount} won{closed.undatedWonCount > 0 ? ` (${closed.undatedWonCount} predate timestamps)` : ""}
                 </p>
               </TiltCard>
               <TiltCard className="p-4">
                 <p className="label-caps text-muted-foreground/70">Lost value</p>
-                <p className="tabular mt-2 text-3xl font-semibold tracking-tight">{money(closed.lostValue)}</p>
+                <p className="tabular mt-2 text-3xl font-semibold tracking-tight">{money(closed.lostValue, workspaceCurrency)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{closed.lostCount} lost deal{closed.lostCount === 1 ? "" : "s"}</p>
               </TiltCard>
             </div>
@@ -257,7 +266,7 @@ export default function AnalyticsPage() {
               <TiltCard className="p-4">
                 <p className="label-caps text-muted-foreground/70">Avg deal size (won)</p>
                 <p className="tabular mt-2 text-3xl font-semibold tracking-tight">
-                  {closed.avgDealSize === null ? "—" : money(closed.avgDealSize)}
+                  {closed.avgDealSize === null ? "—" : money(closed.avgDealSize, workspaceCurrency)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {closed.avgDealSize === null
@@ -280,7 +289,7 @@ export default function AnalyticsPage() {
               </TiltCard>
               <TiltCard className="p-4">
                 <p className="label-caps text-muted-foreground/70">Won this month</p>
-                <p className="tabular mt-2 text-3xl font-semibold tracking-tight">{money(thisMonth.revenue)}</p>
+                <p className="tabular mt-2 text-3xl font-semibold tracking-tight">{money(thisMonth.revenue, workspaceCurrency)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Dated by won timestamp{thisMonth.undatedExcluded > 0 ? ` · ${thisMonth.undatedExcluded} older won deal${thisMonth.undatedExcluded === 1 ? "" : "s"} without timestamps excluded` : ""}
                 </p>
@@ -297,7 +306,7 @@ export default function AnalyticsPage() {
                       <p className="font-medium">Conservative</p>
                       <p className="text-xs text-muted-foreground">Closed won revenue only — an actual, not a prediction</p>
                     </div>
-                    <span className="tabular text-lg font-semibold">{money(forecast.conservative)}</span>
+                    <span className="tabular text-lg font-semibold">{money(forecast.conservative, workspaceCurrency)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
                     <div>
@@ -306,7 +315,7 @@ export default function AnalyticsPage() {
                       </p>
                       <p className="text-xs text-muted-foreground">Won revenue + probability-weighted open pipeline</p>
                     </div>
-                    <span className="tabular text-lg font-semibold">{money(forecast.weighted)}</span>
+                    <span className="tabular text-lg font-semibold">{money(forecast.weighted, workspaceCurrency)}</span>
                   </div>
                   <p className="text-[11px] leading-relaxed text-muted-foreground/60">
                     Estimates based on current pipeline data — not a guarantee of future revenue. No
@@ -336,7 +345,7 @@ export default function AnalyticsPage() {
                             {b.count > 0 && <span className="tabular text-[10px] font-medium text-[#f5f0e6]">{b.count}</span>}
                           </div>
                         </div>
-                        <span className="tabular w-14 shrink-0 text-right text-xs text-muted-foreground">{money(b.value)}</span>
+                        <span className="tabular w-14 shrink-0 text-right text-xs text-muted-foreground">{money(b.value, workspaceCurrency)}</span>
                       </div>
                     );
                   })}
@@ -397,9 +406,9 @@ export default function AnalyticsPage() {
                             )}
                           </td>
                           <td className="tabular py-2 text-right">{r.count}</td>
-                          <td className="tabular py-2 text-right">{r.pipeline > 0 ? money(r.pipeline) : "—"}</td>
-                          <td className="tabular py-2 text-right text-[#42503c]">{r.won > 0 ? money(r.won) : "—"}</td>
-                          <td className="tabular py-2 text-right text-muted-foreground">{r.lost > 0 ? money(r.lost) : "—"}</td>
+                          <td className="tabular py-2 text-right">{r.pipeline > 0 ? money(r.pipeline, workspaceCurrency) : "—"}</td>
+                          <td className="tabular py-2 text-right text-[#42503c]">{r.won > 0 ? money(r.won, workspaceCurrency) : "—"}</td>
+                          <td className="tabular py-2 text-right text-muted-foreground">{r.lost > 0 ? money(r.lost, workspaceCurrency) : "—"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -426,7 +435,9 @@ export default function AnalyticsPage() {
                         <Link to={`/leads/${lead._id}`} className="min-w-0 flex-1 truncate text-sm font-medium underline-offset-4 hover:underline">
                           {dealTitle(lead)}
                           {lead.dealValue !== undefined && (
-                            <span className="ml-1.5 font-normal text-muted-foreground">{money(lead.dealValue)}</span>
+                            <span className="ml-1.5 font-normal text-muted-foreground">
+                              {money(lead.dealValue, dealCurrency(lead, workspaceCurrency))}
+                            </span>
                           )}
                         </Link>
                         <span className="text-xs text-muted-foreground">{flags[0].detail}</span>

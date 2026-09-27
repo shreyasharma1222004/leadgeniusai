@@ -90,6 +90,19 @@ export function dealTitle(lead: Lead): string {
   return lead.company ? `${lead.company} — ${lead.name}` : lead.name;
 }
 
+/**
+ * Effective currency for one deal (Phase 2 cleanup item 2): the deal's own
+ * persisted currency when set, else the workspace currency from the business
+ * profile, else undefined (which money() renders with the documented neutral
+ * marker rather than an invented default).
+ */
+export function dealCurrency(
+  lead: { currency?: string },
+  workspaceCurrency?: string | null,
+): string | undefined {
+  return lead.currency ?? workspaceCurrency ?? undefined;
+}
+
 /** Last known activity timestamp for a deal, from any recorded signal. */
 export function lastActivityOf(lead: Lead): number | undefined {
   return lead.lastActivityAt ?? lead.lastContactedAt;

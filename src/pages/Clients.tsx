@@ -14,7 +14,7 @@ import {
   filterClients,
   sortClients,
 } from "@/lib/clients";
-import { REVENUE_THRESHOLDS, lastActivityOf } from "@/lib/revenue";
+import { REVENUE_THRESHOLDS, dealCurrency, lastActivityOf } from "@/lib/revenue";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
@@ -62,6 +62,7 @@ export default function ClientsPage() {
   const messages = useQuery(api.messages.listForUser, {});
   const followUps = useQuery(api.followUps.listForUser, {});
   const profile = useQuery(api.business.myProfile, {});
+  const workspaceCurrency = profile?.currency ?? undefined;
 
   const [filters, setFilters] = useState<ClientFilterState>({
     health: "all",
@@ -111,6 +112,7 @@ export default function ClientsPage() {
         client={client}
         messages={messages}
         followUps={followUps}
+        currency={workspaceCurrency}
       />
     );
   }
@@ -236,7 +238,7 @@ export default function ClientsPage() {
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between">
-                <span className="tabular text-lg font-semibold">{money(c.totalRevenue)}</span>
+                <span className="tabular text-lg font-semibold">{money(c.totalRevenue, workspaceCurrency)}</span>
                 {healthPill(c)}
               </div>
               <p className="mt-1.5 text-[11px] text-muted-foreground/70">{c.health.detail}</p>
@@ -258,10 +260,12 @@ function ClientDetail({
   client,
   messages,
   followUps,
+  currency,
 }: {
   client: Client;
   messages: Doc<"messages">[];
   followUps: { _id: string; leadId: string; dueAt: number; status: string; note?: string }[];
+  currency?: string;
 }) {
   const dealIds = new Set(client.deals.map((d) => d.lead._id as string));
   const clientMessages = messages
@@ -294,8 +298,8 @@ function ClientDetail({
       {/* Overview numbers (§16) */}
       <div className="grid grid-cols-2 gap-6 border-b border-border pb-6 sm:grid-cols-3 lg:grid-cols-5">
         {[
-          { label: "Total won revenue", value: money(client.totalRevenue) },
-          { label: "Open deal value", value: client.openValue > 0 ? money(client.openValue) : "—" },
+          { label: "Total won revenue", value: money(client.totalRevenue, currency) },
+          { label: "Open deal value", value: client.openValue > 0 ? money(client.openValue, currency) : "—" },
           { label: "Won deals", value: `${client.wonDeals.length}` },
           { label: "Active deals", value: `${client.activeDeals.length}` },
           {
@@ -328,7 +332,7 @@ function ClientDetail({
 
           <section className="rounded-lg border border-border bg-card p-5">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <TrendingUp className="size-4 text-muted-foreground" /> Retention
+              <TrendingUp className="size-4 text-muted-foreground" /> Retention signal
             </h2>
             <p className="mt-3 text-sm font-medium">{RETENTION_LABELS[client.retention.state]}</p>
             {client.retention.evidence.length === 0 ? (
@@ -345,6 +349,12 @@ function ClientDetail({
                 ))}
               </ul>
             )}
+            <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/60">
+              “At risk” means the relationship has gone quiet — a measurable activity signal that
+              it's time to reach out. It is NOT a prediction that this client will churn. Expansion
+              signals appear only when your business profile lists multiple products/services and the
+              relationship is active; otherwise this stays “Not enough data”.
+            </p>
             {client.nextActivityAt !== undefined && (
               <p className="mt-3 text-xs text-muted-foreground">
                 Next scheduled activity {timeAgo(client.nextActivityAt).replace(" from now", "")}
@@ -380,7 +390,7 @@ function ClientDetail({
                     </p>
                   </div>
                   <span className="tabular text-sm font-medium">
-                    {d.lead.dealValue !== undefined ? money(d.lead.dealValue) : "—"}
+                    {d.lead.dealValue !== undefined ? money(d.lead.dealValue, dealCurrency(d.lead, currency)) : "—"}
                   </span>
                 </li>
               ))}

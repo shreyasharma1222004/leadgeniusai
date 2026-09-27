@@ -1,6 +1,14 @@
 import { AppShell } from "@/components/AppShell";
 import { AIButton } from "@/components/spatial";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -73,6 +81,9 @@ export default function ProposalsPage() {
   const remove = useMutation(api.proposals.remove);
   const proposalAssist = useAction(api.ai.proposalAssist);
   const profile = useQuery(api.business.myProfile, {});
+  // Workspace currency default; the proposal's own currency wins when set.
+  const workspaceCurrency = profile?.currency ?? undefined;
+  const proposalCurrency = (p: { currency?: string }) => p.currency ?? workspaceCurrency;
 
   const [building, setBuilding] = useState(false);
   const [editId, setEditId] = useState<Id<"proposals"> | null>(null);
@@ -82,6 +93,10 @@ export default function ProposalsPage() {
   const [sections, setSections] = useState<Record<SectionKey, string>>(emptyDraft());
   const [saving, setSaving] = useState(false);
   const [previewId, setPreviewId] = useState<Id<"proposals"> | null>(null);
+  // Explicit confirmation for "Mark sent" (Phase 2 cleanup item 3): the dialog
+  // states plainly that Dealflow did NOT send anything — the user is recording
+  // their own real-world action. No delivery or view tracking is claimed.
+  const [sentDialogOpen, setSentDialogOpen] = useState(false);
   const [assistLoading, setAssistLoading] = useState(false);
   const [assistError, setAssistError] = useState<string | null>(null);
 
@@ -243,7 +258,7 @@ export default function ProposalsPage() {
     const L: string[] = [];
     L.push(`# ${p.title}`);
     if (deal) L.push(`\n**Client:** ${deal.company ?? deal.name}${deal.company ? ` (${deal.name})` : ""}`);
-    if (p.value !== undefined) L.push(`**Value:** ${money(p.value)}`);
+    if (p.value !== undefined) L.push(`**Value:** ${money(p.value, proposalCurrency(p))}`);
     const section = (label: string, body?: string | string[]) => {
       if (!body || (Array.isArray(body) && body.length === 0)) return;
       L.push(`\n## ${label}`);
@@ -255,7 +270,7 @@ export default function ProposalsPage() {
     section("Solution", p.solution);
     section("Deliverables", p.deliverables);
     section("Timeline", p.timeline);
-    section("Pricing", p.pricing ?? (p.value !== undefined ? money(p.value) : undefined));
+    section("Pricing", p.pricing ?? (p.value !== undefined ? money(p.value, proposalCurrency(p)) : undefined));
     section("Expected Outcomes", p.outcomes);
     section("Next Steps", p.nextSteps);
     L.push(`\n---\nGenerated from Dealflow AI on ${new Date().toLocaleDateString()} — all content from your saved proposal data.`);
@@ -303,7 +318,7 @@ export default function ProposalsPage() {
           <div className="flex flex-wrap items-center gap-2">
             {statusPill(p.status)}
             {p.status === "draft" && (
-              <Button size="sm" onClick={() => void markSent({ id: p._id }).then(() => toast("Marked sent — this records your real-world action; no email was sent from here."))}>
+              <Button size="sm" onClick={() => setSentDialogOpen(true)}>
                 <Send className="size-3.5" /> Mark sent
               </Button>
             )}
@@ -370,7 +385,7 @@ export default function ProposalsPage() {
           <div className="space-y-4">
             <section className="rounded-lg border border-border bg-card p-5">
               <h2 className="text-sm font-semibold">Value</h2>
-              <p className="tabular mt-2 text-2xl font-semibold">{p.value !== undefined ? money(p.value) : "—"}</p>
+              <p className="tabular mt-2 text-2xl font-semibold">{p.value !== undefined ? money(p.value, proposalCurrency(p)) : "—"}</p>
             </section>
             <section className="rounded-lg border border-border bg-muted/30 p-5">
               <h2 className="text-sm font-semibold">Timestamps</h2>
@@ -389,9 +404,43 @@ export default function ProposalsPage() {
                 <Row label="Rejected" value={p.rejectedAt !== undefined ? formatDateTime(p.rejectedAt) : "—"} />
                 {p.rejectedReason && <Row label="Reason" value={p.rejectedReason} />}
               </dl>
+              <p className="mt-4 rounded-md border border-border bg-background px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                “Sent” is recorded by you after delivering the proposal yourself — Dealflow does not
+                send proposals, and no delivery or view tracking exists. The viewed timestamp is
+                reserved for a future real tracking mechanism and stays empty for now.
+              </p>
             </section>
           </div>
         </div>
+
+        {/* Mark-sent confirmation — honest about what actually happens */}
+        <Dialog open={sentDialogOpen} onOpenChange={setSentDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Mark proposal as sent?</DialogTitle>
+              <DialogDescription>
+                This records that YOU sent the proposal externally (email, meeting, or however you
+                deliver it). Dealflow itself did not send this proposal, and no delivery or view
+                tracking is claimed — the “viewed” timestamp stays empty until real tracking exists.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSentDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setSentDialogOpen(false);
+                  void markSent({ id: p._id }).then(() =>
+                    toast("Marked as sent manually — Dealflow did not send this proposal."),
+                  );
+                }}
+              >
+                <Send className="size-3.5" /> Record as sent
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </AppShell>
     );
   }
@@ -549,7 +598,7 @@ export default function ProposalsPage() {
                     </div>
                     <p className="mt-1 truncate text-xs text-muted-foreground">
                       {deal ? (deal.company ?? deal.name) : "Deal removed"}
-                      {p.value !== undefined && ` · ${money(p.value)}`}
+                      {p.value !== undefined && ` · ${money(p.value, proposalCurrency(p))}`}
                       {p.sentAt !== undefined && ` · sent ${timeAgo(p.sentAt)}`}
                     </p>
                   </Link>

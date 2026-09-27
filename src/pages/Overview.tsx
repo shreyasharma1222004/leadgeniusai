@@ -13,6 +13,7 @@ import { computeClients } from "@/lib/clients";
 import {
   computeClosedStats,
   computePipelineStats,
+  dealCurrency,
   dealFlags,
   dealTitle,
   stageLastAtMap,
@@ -130,6 +131,8 @@ export default function OverviewPage() {
   const opportunities = computeOpportunities(metrics, leads, followUps as FollowUpRow[]);
   const plan = computeTodayPlan(metrics, leads, followUps as FollowUpRow[]);
 
+  const workspaceCurrency = profile?.currency ?? undefined;
+
   // ── Phase 2: revenue snapshot (§21) — same revenue source of truth ──
   const closedStats = computeClosedStats(leads);
   const pipelineStats = computePipelineStats(leads);
@@ -157,7 +160,7 @@ export default function OverviewPage() {
       out.push({
         id: `deal-${f.lead._id}`,
         title: `Review ${dealTitle(f.lead)}`,
-        why: `${f.flags[0].detail}${f.lead.dealValue !== undefined ? ` · ${money(f.lead.dealValue)} open value` : ""}`,
+        why: `${f.flags[0].detail}${f.lead.dealValue !== undefined ? ` · ${money(f.lead.dealValue, dealCurrency(f.lead, workspaceCurrency))} open value` : ""}`,
         to: `/leads/${f.lead._id}`,
         kind: "deal",
       });
@@ -203,13 +206,13 @@ export default function OverviewPage() {
       out.push({
         id: `closing-${l._id}`,
         title: `Push ${dealTitle(l)} to close`,
-        why: `Expected close in ${days} day${days === 1 ? "" : "s"}${l.dealValue !== undefined ? ` · ${money(l.dealValue)} open value` : ""}`,
+        why: `Expected close in ${days} day${days === 1 ? "" : "s"}${l.dealValue !== undefined ? ` · ${money(l.dealValue, dealCurrency(l, workspaceCurrency))} open value` : ""}`,
         to: `/leads/${l._id}`,
         kind: "closing",
       });
     }
     return out.slice(0, 4);
-  }, [leads, proposals, clients, stageLastAt]);
+  }, [leads, proposals, clients, stageLastAt, workspaceCurrency]);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -436,9 +439,9 @@ export default function OverviewPage() {
             </div>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {[
-                { label: "Pipeline", value: money(pipelineStats.pipelineValue), hint: `${pipelineStats.openDeals} open deal${pipelineStats.openDeals === 1 ? "" : "s"}`, to: "/pipeline", icon: Users },
-                { label: "Weighted pipeline", value: money(pipelineStats.weightedPipeline), hint: "Estimate based on probabilities", to: "/analytics", icon: TrendingUp },
-                { label: "Won revenue", value: money(closedStats.wonRevenue), hint: `Actual closed · ${closedStats.wonCount} deal${closedStats.wonCount === 1 ? "" : "s"}`, to: "/analytics", icon: Trophy, tone: "olive" as const },
+                { label: "Pipeline", value: money(pipelineStats.pipelineValue, workspaceCurrency), hint: `${pipelineStats.openDeals} open deal${pipelineStats.openDeals === 1 ? "" : "s"}`, to: "/pipeline", icon: Users },
+                { label: "Weighted pipeline", value: money(pipelineStats.weightedPipeline, workspaceCurrency), hint: "Estimate based on probabilities", to: "/analytics", icon: TrendingUp },
+                { label: "Won revenue", value: money(closedStats.wonRevenue, workspaceCurrency), hint: `Actual closed · ${closedStats.wonCount} deal${closedStats.wonCount === 1 ? "" : "s"}`, to: "/analytics", icon: Trophy, tone: "olive" as const },
                 { label: "Open deals", value: `${pipelineStats.openDeals}`, hint: `${pipelineStats.openOpportunities} in-pipeline`, to: "/pipeline", icon: Users },
                 { label: "Proposals", value: `${pendingProposals}`, hint: pendingProposals > 0 ? "Awaiting response" : "None pending", to: "/proposals", icon: FileText },
                 { label: "Clients", value: `${clients.length}`, hint: `${healthyClients} healthy`, to: "/clients", icon: Building2 },
@@ -473,10 +476,10 @@ export default function OverviewPage() {
           {/* ── KPI strip ──────────────────────────────────────────────────── */}
           <section className="mt-12 grid grid-cols-2 gap-x-8 gap-y-8 border-t border-border pt-8 sm:grid-cols-3 lg:grid-cols-6">
             {[
-              { label: "Pipeline value", value: money(metrics.pipelineValue), hint: `${metrics.activeOpportunities} open · weighted ${money(metrics.weightedPipeline)} (estimate)` },
-              { label: "Won revenue", value: money(metrics.wonRevenue), hint: `actual closed · ${metrics.wonCount} deal${metrics.wonCount === 1 ? "" : "s"}`, tone: "olive" },
+              { label: "Pipeline value", value: money(metrics.pipelineValue, workspaceCurrency), hint: `${metrics.activeOpportunities} open · weighted ${money(metrics.weightedPipeline, workspaceCurrency)} (estimate)` },
+              { label: "Won revenue", value: money(metrics.wonRevenue, workspaceCurrency), hint: `actual closed · ${metrics.wonCount} deal${metrics.wonCount === 1 ? "" : "s"}`, tone: "olive" },
               { label: "Conversion", value: `${metrics.conversionRate}%`, hint: "leads → won" },
-              { label: "Avg deal size", value: metrics.avgDealSize === null ? "—" : money(metrics.avgDealSize), hint: "closed deals" },
+              { label: "Avg deal size", value: metrics.avgDealSize === null ? "—" : money(metrics.avgDealSize, workspaceCurrency), hint: "closed deals" },
               { label: "Response rate", value: `${metrics.responseRate}%`, hint: `${metrics.unreadReplies} unread` },
               { label: "Total leads", value: `${metrics.totalLeads}`, hint: `${metrics.newThisWeek} new this week` },
             ].map((kpi, i) => (

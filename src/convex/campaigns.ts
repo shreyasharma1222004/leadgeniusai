@@ -5,6 +5,7 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
 import { v } from "convex/values";
@@ -356,7 +357,11 @@ export const sendAll = action({
             body: campaign.body,
             status: "sent",
           });
-          await ctx.runMutation(internal.campaigns.markContacted, { leadId: row.leadId, userId });
+          await ctx.runMutation(internal.campaigns.markContacted, {
+            leadId: row.leadId,
+            userId,
+            campaignId: id,
+          });
           sent++;
         } catch (err) {
           const message = err instanceof Error ? err.message : "Unknown send error";
@@ -419,6 +424,8 @@ export const markSentManually = mutation({
         createdAt: Date.now(),
         sentAt: Date.now(),
       });
+      // The campaign row proves this lead was targeted — stamp attribution.
+      await stampCampaignAttribution(ctx, row.leadId, id, userId);
     }
     return { marked: rowIds.length };
   },
@@ -479,15 +486,45 @@ export const markRow = internalMutation({
   },
 });
 
+/**
+ * Stamp verified campaign attribution on a lead (Phase 2 §9).
+ *
+ * Called from sendAll / markSentManually AFTER the existing campaignLeads row
+ * proves the relationship — the campaign genuinely targeted this lead, so the
+ * attribution is a fact, not a guess. First-write-wins: an existing campaignId
+ * is NEVER overwritten (the original acquisition source is the one that
+ * matters for revenue breakdowns). Leads reached outside any campaign keep
+ * campaignId undefined and stay in the honest "No attribution data yet" bucket.
+ */
+async function stampCampaignAttribution(
+  ctx: MutationCtx,
+  leadId: Id<"leads">,
+  campaignId: Id<"campaigns">,
+  userId: Id<"users">,
+) {
+  const lead = await ctx.db.get(leadId);
+  if (!lead || lead.userId !== userId) return;
+  if (lead.campaignId !== undefined) return; // first-write-wins
+  await ctx.db.patch(leadId, { campaignId });
+}
+
 export const markContacted = internalMutation({
-  args: { leadId: v.id("leads"), userId: v.id("users") },
-  handler: async (ctx, { leadId, userId }) => {
+  args: {
+    leadId: v.id("leads"),
+    userId: v.id("users"),
+    campaignId: v.optional(v.id("campaigns")),
+  },
+  handler: async (ctx, { leadId, userId, campaignId }) => {
     const lead = await ctx.db.get(leadId);
     if (!lead || lead.userId !== userId) return;
     await ctx.db.patch(leadId, {
       status: lead.status === "new" ? "contacted" : lead.status,
       lastContactedAt: Date.now(),
+      lastActivityAt: Date.now(),
     });
+    if (campaignId !== undefined) {
+      await stampCampaignAttribution(ctx, leadId, campaignId, userId);
+    }
   },
 });
 

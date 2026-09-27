@@ -21,11 +21,12 @@ import { formatDateTime, initials, timeAgo } from "@/lib/format";
 import { useAnalyzeLead } from "@/lib/leads-client";
 import { money, nextBestAction } from "@/lib/growth";
 import { defaultProbability, weightedValue } from "@/lib/leadStatus";
-import { DEAL_FLAG_CLASSES, DEAL_FLAG_LABELS, dealFlags, dealTitle, lastActivityOf } from "@/lib/revenue";
+import { DEAL_FLAG_CLASSES, DEAL_FLAG_LABELS, dealCurrency, dealFlags, dealTitle, lastActivityOf } from "@/lib/revenue";
 import { useEffect, useMemo } from "react";
 import {
   LEAD_STATUSES,
   LEAD_STATUS_LABELS,
+  lifecycleLabel,
   statusClasses,
   statusLabel,
 } from "@/lib/leadStatus";
@@ -92,6 +93,8 @@ export default function LeadDetailPage() {
   const saveAnalysis = useMutation(api.leads.saveAnalysis);
   const markWon = useMutation(api.leads.markWon);
   const markLost = useMutation(api.leads.markLost);
+  const profile = useQuery(api.business.myProfile, {});
+  const workspaceCurrency = profile?.currency ?? undefined;
   const stageHistory = useQuery(
     api.leads.stageHistoryForLead,
     id ? { leadId: id as Id<"leads"> } : "skip",
@@ -218,7 +221,7 @@ export default function LeadDetailPage() {
       toast.success("Deal marked Won", {
         description:
           lead.dealValue !== undefined
-            ? `${money(lead.dealValue)} now counts as actual won revenue.`
+            ? `${money(lead.dealValue, dealCurrency(lead, workspaceCurrency))} now counts as actual won revenue.`
             : "Add a deal value so this counts toward revenue.",
       });
     } catch {
@@ -304,7 +307,7 @@ export default function LeadDetailPage() {
                 </p>
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <span
                 className={cn(
                   "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
@@ -312,6 +315,9 @@ export default function LeadDetailPage() {
                 )}
               >
                 {statusLabel(lead.status)}
+              </span>
+              <span className="rounded-full border border-border bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">
+                {lifecycleLabel(lead.status)}
               </span>
               {lead.score !== undefined && (
                 <span className="tabular text-xs text-muted-foreground">
@@ -525,7 +531,7 @@ export default function LeadDetailPage() {
           />
 
           {/* Deal block — value, probability, expected close (§17) */}
-          <DealCard lead={lead} onSave={async (fields) => {
+          <DealCard lead={lead} currency={dealCurrency(lead, workspaceCurrency)} onSave={async (fields) => {
             try {
               await updateDeal({ id: lead._id, ...fields });
               toast("Deal details saved");
@@ -535,7 +541,7 @@ export default function LeadDetailPage() {
           }} />
 
           {/* Proposals for this deal (Phase 2 §12) */}
-          <DealProposalsCard dealId={lead._id} proposals={dealProposals} />
+          <DealProposalsCard dealId={lead._id} proposals={dealProposals} currency={workspaceCurrency} />
 
           {/* Stage history (Phase 2 §3) — recorded for new changes only */}
           <StageHistoryCard history={stageHistory} />
@@ -829,9 +835,11 @@ function MessageThread({
 function DealProposalsCard({
   dealId,
   proposals,
+  currency,
 }: {
   dealId: Id<"leads">;
   proposals: Doc<"proposals">[] | undefined;
+  currency?: string;
 }) {
   return (
     <section className="rounded-lg border border-border bg-card p-5">
@@ -863,7 +871,7 @@ function DealProposalsCard({
               >
                 <span className="min-w-0 truncate text-sm font-medium">{p.title}</span>
                 <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {p.value !== undefined && <span className="tabular">{money(p.value)}</span>}
+                  {p.value !== undefined && <span className="tabular">{money(p.value, p.currency ?? currency)}</span>}
                   <span className="rounded-full border border-border bg-card px-2 py-0.5 capitalize">{p.status}</span>
                   {p.sentAt !== undefined && <span>{timeAgo(p.sentAt)}</span>}
                 </span>
@@ -949,6 +957,7 @@ function NextBestActionCard({
 function DealCard({
   lead,
   onSave,
+  currency,
 }: {
   lead: Lead;
   onSave: (fields: {
@@ -956,6 +965,7 @@ function DealCard({
     probability?: number;
     expectedCloseAt?: number;
   }) => Promise<void>;
+  currency?: string;
 }) {
   const [value, setValue] = useState(lead.dealValue?.toString() ?? "");
   const [probability, setProbability] = useState(lead.probability?.toString() ?? "");
@@ -1031,7 +1041,7 @@ function DealCard({
       )}
       <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
         <div className="grid gap-1">
-          <Label htmlFor="deal-value" className="text-xs">Deal value ($)</Label>
+          <Label htmlFor="deal-value" className="text-xs">Deal value</Label>
           <Input
             id="deal-value"
             value={value}
@@ -1063,7 +1073,7 @@ function DealCard({
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
           {lead.dealValue !== undefined
-            ? `Weighted value ${money(weighted)} (value × probability) — an estimate, not a forecast promise.`
+            ? `Weighted value ${money(weighted, currency)} (value × probability) — an estimate, not a forecast promise.`
             : "Set a value so this deal counts toward pipeline and revenue."}
           {last !== undefined && ` · Last activity ${timeAgo(last)}`}
         </p>

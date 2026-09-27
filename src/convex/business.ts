@@ -117,6 +117,12 @@ export const goalsWithProgress = query({
       .query("leads")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
+    // Workspace currency (Phase 2 cleanup item 2): the business profile's saved
+    // currency is the single default for every money figure in the app.
+    const profile = await ctx.db
+      .query("businessProfiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
 
     return goals
       .map((g) => {
@@ -138,7 +144,7 @@ export const goalsWithProgress = query({
           unit: derived.unit,
           basis: derived.basis,
           unavailableReason: derived.unavailableReason,
-          formatted: current !== null ? formatGoalValue(current, derived.unit) : null,
+          formatted: current !== null ? formatGoalValue(current, derived.unit, profile?.currency) : null,
           progress: goalProgressFraction(current, g.targetValue),
         };
       })

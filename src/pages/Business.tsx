@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { api } from "@/convex/_generated/api";
+import { money } from "@/lib/growth";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -67,10 +68,11 @@ const BUSINESS_MODELS = [
 
 const SALES_CYCLES = ["< 1 week", "1–4 weeks", "1–3 months", "3–6 months", "6+ months"];
 
-function moneyFmt(n: number): string {
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (Math.abs(n) >= 1_000) return `$${Math.round(n / 1_000)}k`;
-  return `$${n.toLocaleString()}`;
+/** Compact money formatting on the Business page — uses the profile's own
+ *  saved currency so goal targets and revenue figures match the rest of the
+ *  app (Phase 2 cleanup item 2: one central formatter, no hardcoded symbols). */
+function moneyFmt(n: number, currency?: string): string {
+  return money(n, currency);
 }
 
 export default function BusinessPage() {
@@ -224,6 +226,7 @@ export default function BusinessPage() {
                   <GoalCard
                     key={g._id}
                     goal={g}
+                    currency={profile?.currency}
                     onEdit={() => setGoalDialog({ mode: "edit", goal: g })}
                     onDelete={() => setConfirmDelete(g._id)}
                     onSetManual={async (value) => {
@@ -313,7 +316,7 @@ function ProfileView({ profile }: { profile: Profile }) {
       label: "Revenue focus",
       value:
         profile.targetMonthlyRevenue !== undefined
-          ? `${moneyFmt(profile.targetMonthlyRevenue)} / month target`
+          ? `${moneyFmt(profile.targetMonthlyRevenue, profile.currency)} / month target`
           : undefined,
     },
   ].filter((r): r is { label: string; value: string } => Boolean(r.value));
@@ -628,11 +631,13 @@ function GoalCard({
   onEdit,
   onDelete,
   onSetManual,
+  currency,
 }: {
   goal: GoalRow;
   onEdit: () => void;
   onDelete: () => void;
   onSetManual: (value: number | undefined) => Promise<void>;
+  currency?: string;
 }) {
   const [manualOpen, setManualOpen] = useState(false);
   const [manualVal, setManualVal] = useState("");
@@ -670,7 +675,7 @@ function GoalCard({
             <span className="tabular text-2xl font-semibold tracking-tight">{goal.formatted}</span>
             {goal.targetValue !== undefined && (
               <span className="tabular text-sm text-muted-foreground">
-                / {goalUnitLabel(goal.unit, goal.targetValue)}
+                / {goalUnitLabel(goal.unit, goal.targetValue, currency)}
               </span>
             )}
           </>
@@ -745,8 +750,12 @@ function GoalCard({
   );
 }
 
-function goalUnitLabel(unit: "money" | "count" | "percent", target: number): string {
-  if (unit === "money") return moneyFmt(target);
+function goalUnitLabel(
+  unit: "money" | "count" | "percent",
+  target: number,
+  currency?: string,
+): string {
+  if (unit === "money") return moneyFmt(target, currency);
   if (unit === "percent") return `${target}%`;
   return target.toLocaleString();
 }
