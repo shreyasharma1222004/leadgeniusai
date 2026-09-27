@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
-import { money } from "@/lib/growth";
+import { currencySymbol, money } from "@/lib/growth";
 import { dealCurrency } from "@/lib/revenue";
 import { timeAgo } from "@/lib/format";
 import {
@@ -212,7 +212,7 @@ export default function PipelinePage() {
       {filtersOpen && (
         <div className="mb-4 grid gap-3 rounded-lg border border-border bg-card p-3 sm:grid-cols-4">
           <div className="grid gap-1">
-            <Label htmlFor="f-min" className="text-xs">Min value ($)</Label>
+            <Label htmlFor="f-min" className="text-xs">Min value ({currencySymbol(workspaceCurrency).trim()})</Label>
             <Input id="f-min" value={minValue} onChange={(e) => setMinValue(e.target.value.replace(/[^0-9]/g, ""))} placeholder="e.g. 5000" className="h-8 text-sm" />
           </div>
           <div className="grid gap-1">
@@ -290,11 +290,25 @@ export default function PipelinePage() {
                 )}
               </div>
               <div className="flex min-h-[120px] flex-1 flex-col gap-2 p-2">
-                {columnLeads.length === 0 && (
-                  <p className="px-2 py-6 text-center text-xs text-muted-foreground/60">
-                    {hasFilter ? "No matches here" : "Drop cards here"}
-                  </p>
-                )}
+                {columnLeads.length === 0 &&
+                  (isDragging ? (
+                    // Active drag: invite the drop.
+                    <p
+                      className={cn(
+                        "px-2 py-6 text-center text-xs transition-colors",
+                        isOver
+                          ? "font-medium text-foreground"
+                          : "text-muted-foreground/60",
+                      )}
+                    >
+                      Drop cards here
+                    </p>
+                  ) : (
+                    // Permanently empty column: a calm, honest empty state.
+                    <p className="px-2 py-6 text-center text-xs text-muted-foreground/50">
+                      {hasFilter ? "No matches here" : "No opportunities here yet."}
+                    </p>
+                  ))}
                 {columnLeads.map((lead: Lead) => (
                   <DealCard
                     key={lead._id}

@@ -40,6 +40,26 @@ const BUSINESS_TYPES = [
 const TEAM_SIZES = ["Just me", "2–5", "6–20", "20+"] as const;
 
 /**
+ * Workspace currency, captured at onboarding (Phase 2 cleanup): the business
+ * profile's saved currency is the single default for every money figure in the
+ * app. Matches the /business form's default so the two never disagree.
+ */
+const CURRENCIES = [
+  "USD",
+  "EUR",
+  "GBP",
+  "INR",
+  "CAD",
+  "AUD",
+  "JPY",
+  "CHF",
+  "SGD",
+  "AED",
+  "BRL",
+  "ZAR",
+] as const;
+
+/**
  * Post-signup business onboarding (§51): what you do, what you sell, who you
  * sell to, growth goal, revenue goal, team size. Answers personalize the
  * dashboard and Copilot context. Shown once; skippable.
@@ -59,6 +79,7 @@ export function OnboardingDialog() {
   const [growthGoal, setGrowthGoal] = useState("");
   const [revenueGoal, setRevenueGoal] = useState("");
   const [teamSize, setTeamSize] = useState("");
+  const [currency, setCurrency] = useState<string>("USD");
 
   if (!open) return null;
 
@@ -99,6 +120,7 @@ export function OnboardingDialog() {
           businessType: businessType || undefined,
           products: sells.trim() || undefined,
           targetGeography: audience.trim() || undefined,
+          currency: currency || undefined,
           teamSize: teamSize || undefined,
           targetMonthlyRevenue: revenueGoalNumber,
         });
@@ -187,7 +209,7 @@ export function OnboardingDialog() {
       </div>
     </div>,
 
-    // Step 4 — revenue goal (optional) + team size
+    // Step 4 — revenue goal (optional) + currency + team size
     <div key="numbers" className="grid gap-4">
       <div className="grid gap-1.5">
         <Label htmlFor="ob-revenue">Approximate monthly revenue goal (optional)</Label>
@@ -199,25 +221,45 @@ export function OnboardingDialog() {
           inputMode="numeric"
         />
       </div>
-      <div className="grid gap-3">
-        <Label>How large is your team?</Label>
-        <div className="flex flex-wrap gap-2">
-          {TEAM_SIZES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              aria-pressed={teamSize === t}
-              onClick={() => setTeamSize(t)}
-              className={cn(
-                "cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                teamSize === t
-                  ? "border-[#171613] bg-[#171613] text-[#f5f0e6]"
-                  : "border-border bg-card text-muted-foreground hover:border-[#b3a894] hover:text-foreground",
-              )}
-            >
-              {t}
-            </button>
-          ))}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-1.5">
+          <Label htmlFor="ob-currency">Currency</Label>
+          <select
+            id="ob-currency"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            {CURRENCIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-muted-foreground">
+            Used for every money figure. Changeable later on the Business page.
+          </p>
+        </div>
+        <div className="grid gap-3">
+          <Label>How large is your team?</Label>
+          <div className="flex flex-wrap gap-2">
+            {TEAM_SIZES.map((t) => (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={teamSize === t}
+                onClick={() => setTeamSize(t)}
+                className={cn(
+                  "cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  teamSize === t
+                    ? "border-[#171613] bg-[#171613] text-[#f5f0e6]"
+                    : "border-border bg-card text-muted-foreground hover:border-[#b3a894] hover:text-foreground",
+                )}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>,
