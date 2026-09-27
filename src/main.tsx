@@ -26,6 +26,8 @@ const ContactsPage = lazy(() => import("./pages/Contacts.tsx"));
 const TemplatesPage = lazy(() => import("./pages/Templates.tsx"));
 const IntegrationsPage = lazy(() => import("./pages/Integrations.tsx"));
 const BusinessPage = lazy(() => import("./pages/Business.tsx"));
+const ProposalsPage = lazy(() => import("./pages/Proposals.tsx"));
+const ClientsPage = lazy(() => import("./pages/Clients.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -173,6 +175,38 @@ createRoot(document.getElementById("root")!).render(
                 element={
                   <RequireAuth>
                     <PipelinePage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/proposals"
+                element={
+                  <RequireAuth>
+                    <ProposalsPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/proposals/:id"
+                element={
+                  <RequireAuth>
+                    <ProposalsPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/clients"
+                element={
+                  <RequireAuth>
+                    <ClientsPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/clients/:id"
+                element={
+                  <RequireAuth>
+                    <ClientsPage />
                   </RequireAuth>
                 }
               />

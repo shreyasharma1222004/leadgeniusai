@@ -9,12 +9,20 @@ import { useAuth } from "@/hooks/use-auth";
 import { money } from "@/lib/growth";
 import { timeAgo } from "@/lib/format";
 import { GOAL_PERIOD_LABELS, type GoalPeriod } from "@/lib/goalEngine";
+import { computeClients } from "@/lib/clients";
+import {
+  computeClosedStats,
+  computePipelineStats,
+  dealFlags,
+  dealTitle,
+  stageLastAtMap,
+} from "@/lib/revenue";
 import { cn } from "@/lib/utils";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
-import { ArrowRight, ArrowUpRight, Building2, Check, Sparkles, X } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Building2, Check, FileText, Sparkles, TrendingUp, Trophy, Users, X } from "lucide-react";
 import { Link } from "react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   computeGrowthBrief,
@@ -75,6 +83,8 @@ export default function OverviewPage() {
   const campaigns = useQuery(api.campaigns.list, {});
   const profile = useQuery(api.business.myProfile, {});
   const goals = useQuery(api.business.goalsWithProgress, {});
+  const proposals = useQuery(api.proposals.list, {});
+  const history = useQuery(api.leads.stageHistoryForUser, {});
   const setFollowUpStatus = useMutation(api.leads.setFollowUpStatus);
   // AI Business Brief action + state (hooks must live above the loading return)
   const businessBriefAction = useAction(api.ai.businessBrief);
@@ -87,7 +97,9 @@ export default function OverviewPage() {
     leads !== undefined &&
     messages !== undefined &&
     followUps !== undefined &&
-    campaigns !== undefined;
+    campaigns !== undefined &&
+    proposals !== undefined &&
+    history !== undefined;
 
   const first = (user?.name ?? "there").split(" ")[0];
 
@@ -117,6 +129,87 @@ export default function OverviewPage() {
   const brief = computeGrowthBrief(metrics, leads);
   const opportunities = computeOpportunities(metrics, leads, followUps as FollowUpRow[]);
   const plan = computeTodayPlan(metrics, leads, followUps as FollowUpRow[]);
+
+  // ── Phase 2: revenue snapshot (§21) — same revenue source of truth ──
+  const closedStats = computeClosedStats(leads);
+  const pipelineStats = computePipelineStats(leads);
+  const stageLastAt = useMemo(() => stageLastAtMap(history), [history]);
+  const pendingProposals = (proposals ?? []).filter(
+    (p) => p.status === "sent" || p.status === "viewed",
+  ).length;
+  const clients = useMemo(
+    () => computeClients(leads, profile?.products),
+    [leads, profile?.products],
+  );
+  const healthyClients = clients.filter((c) => c.health.state === "healthy").length;
+
+  // ── Phase 2: today's revenue priorities (§22) — evidence-backed, why-labeled ──
+  const revenuePriorities = useMemo(() => {
+    const out: { id: string; title: string; why: string; to: string; kind: string }[] = [];
+    const now = Date.now();
+    // 1. Close-date passed / stalled high-value deals
+    const flagged = leads
+      .filter((l) => l.status !== "won" && l.status !== "lost")
+      .map((l) => ({ lead: l, flags: dealFlags(l, { now, lastStageAt: stageLastAt.get(l._id as string), proposalPending: (proposals ?? []).some((p) => p.dealId === l._id && (p.status === "sent" || p.status === "viewed")) }) }))
+      .filter((f) => f.flags.length > 0)
+      .sort((a, b) => (b.lead.dealValue ?? 0) - (a.lead.dealValue ?? 0));
+    for (const f of flagged.slice(0, 2)) {
+      out.push({
+        id: `deal-${f.lead._id}`,
+        title: `Review ${dealTitle(f.lead)}`,
+        why: `${f.flags[0].detail}${f.lead.dealValue !== undefined ? ` · ${money(f.lead.dealValue)} open value` : ""}`,
+        to: `/leads/${f.lead._id}`,
+        kind: "deal",
+      });
+    }
+    // 2. Proposals waiting on a response
+    const waiting = (proposals ?? []).filter((p) => p.status === "sent" || p.status === "viewed");
+    for (const p of waiting.slice(0, 1)) {
+      out.push({
+        id: `prop-${p._id}`,
+        title: `Follow up: ${p.title}`,
+        why: `Proposal sent ${p.sentAt !== undefined ? timeAgo(p.sentAt) : "recently"} and no outcome recorded yet`,
+        to: `/proposals/${p._id}`,
+        kind: "proposal",
+      });
+    }
+    // 3. Client needing attention
+    const attentionClient = clients
+      .filter((c) => c.health.state !== "healthy")
+      .sort((a, b) => (a.lastActivityAt ?? 0) - (b.lastActivityAt ?? 0))[0];
+    if (attentionClient) {
+      out.push({
+        id: `client-${attentionClient.key}`,
+        title: `Reach out to ${attentionClient.name}`,
+        why: `Client needing attention — ${attentionClient.health.detail}`,
+        to: `/clients/${encodeURIComponent(attentionClient.key)}`,
+        kind: "client",
+      });
+    }
+    // 4. Deals closing within 14 days (opportunity push)
+    const closingSoon = leads
+      .filter(
+        (l) =>
+          l.status !== "won" &&
+          l.status !== "lost" &&
+          l.expectedCloseAt !== undefined &&
+          l.expectedCloseAt >= now &&
+          l.expectedCloseAt <= now + 14 * 86_400_000,
+      )
+      .sort((a, b) => (a.expectedCloseAt ?? 0) - (b.expectedCloseAt ?? 0));
+    for (const l of closingSoon.slice(0, 1)) {
+      if (out.some((o) => o.id === `deal-${l._id}`)) continue;
+      const days = Math.ceil(((l.expectedCloseAt ?? now) - now) / 86_400_000);
+      out.push({
+        id: `closing-${l._id}`,
+        title: `Push ${dealTitle(l)} to close`,
+        why: `Expected close in ${days} day${days === 1 ? "" : "s"}${l.dealValue !== undefined ? ` · ${money(l.dealValue)} open value` : ""}`,
+        to: `/leads/${l._id}`,
+        kind: "closing",
+      });
+    }
+    return out.slice(0, 4);
+  }, [leads, proposals, clients, stageLastAt]);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -333,8 +426,52 @@ export default function OverviewPage() {
 
       {leads.length > 0 && (
         <>
+          {/* ── Revenue snapshot (Phase 2 §21) ─────────────────────────── */}
+          <section className="mt-10 border-t border-border pt-8">
+            <div className="flex items-center justify-between">
+              <p className="label-caps text-muted-foreground">Revenue snapshot</p>
+              <Link to="/analytics" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
+                Revenue intelligence →
+              </Link>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {[
+                { label: "Pipeline", value: money(pipelineStats.pipelineValue), hint: `${pipelineStats.openDeals} open deal${pipelineStats.openDeals === 1 ? "" : "s"}`, to: "/pipeline", icon: Users },
+                { label: "Weighted pipeline", value: money(pipelineStats.weightedPipeline), hint: "Estimate based on probabilities", to: "/analytics", icon: TrendingUp },
+                { label: "Won revenue", value: money(closedStats.wonRevenue), hint: `Actual closed · ${closedStats.wonCount} deal${closedStats.wonCount === 1 ? "" : "s"}`, to: "/analytics", icon: Trophy, tone: "olive" as const },
+                { label: "Open deals", value: `${pipelineStats.openDeals}`, hint: `${pipelineStats.openOpportunities} in-pipeline`, to: "/pipeline", icon: Users },
+                { label: "Proposals", value: `${pendingProposals}`, hint: pendingProposals > 0 ? "Awaiting response" : "None pending", to: "/proposals", icon: FileText },
+                { label: "Clients", value: `${clients.length}`, hint: `${healthyClients} healthy`, to: "/clients", icon: Building2 },
+              ].map((card, i) => {
+                const Icon = card.icon;
+                return (
+                  <motion.div
+                    key={card.label}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.04 * i, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <Link
+                      to={card.to}
+                      className="block rounded-lg border border-border bg-card p-4 transition-colors hover:border-[#b3a894]"
+                    >
+                      <div className="flex items-center justify-between">
+                        <p className={cn("tabular text-xl font-semibold tracking-tight", "tone" in card && card.tone === "olive" && "text-[#53634a]")}>
+                          {card.value}
+                        </p>
+                        <Icon className="size-3.5 text-muted-foreground/50" />
+                      </div>
+                      <p className="label-caps mt-1.5 text-muted-foreground">{card.label}</p>
+                      <p className="text-[11px] text-muted-foreground/60">{card.hint}</p>
+                    </Link>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </section>
+
           {/* ── KPI strip ──────────────────────────────────────────────────── */}
-          <section className="mt-10 grid grid-cols-2 gap-x-8 gap-y-8 border-t border-border pt-8 sm:grid-cols-3 lg:grid-cols-6">
+          <section className="mt-12 grid grid-cols-2 gap-x-8 gap-y-8 border-t border-border pt-8 sm:grid-cols-3 lg:grid-cols-6">
             {[
               { label: "Pipeline value", value: money(metrics.pipelineValue), hint: `${metrics.activeOpportunities} open · weighted ${money(metrics.weightedPipeline)} (estimate)` },
               { label: "Won revenue", value: money(metrics.wonRevenue), hint: `actual closed · ${metrics.wonCount} deal${metrics.wonCount === 1 ? "" : "s"}`, tone: "olive" },
@@ -530,7 +667,28 @@ export default function OverviewPage() {
             </div>
 
             <div className="lg:col-span-2">
-              <p className="label-caps text-muted-foreground">Today's growth plan</p>
+              <p className="label-caps text-muted-foreground">Today's revenue priorities</p>
+              {revenuePriorities.length === 0 ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Nothing needs revenue attention right now — deals are moving, proposals are fresh,
+                  clients are active.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {revenuePriorities.map((a) => (
+                    <li key={a.id} className="rounded-lg border border-border bg-card px-3.5 py-2.5">
+                      <Link to={a.to} className="block truncate text-sm font-medium underline-offset-4 hover:underline">
+                        {a.title}
+                      </Link>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{a.why}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-3 text-[11px] text-muted-foreground/60">
+                Every priority shows why it was selected — computed from your actual records.
+              </p>
+              <p className="label-caps mt-6 text-muted-foreground">Today's growth plan</p>
               {plan.length === 0 ? (
                 <p className="mt-3 text-sm text-muted-foreground">
                   Nothing scheduled for today. Schedule follow-ups from any lead and they land here.

@@ -52,6 +52,30 @@ import {
  * weightedPipeline and is an estimate. Dashboard and Analytics pages both
  * consume these functions, so a metric can never disagree with itself across
  * pages. (The former src/lib/analytics.ts was merged into this file.)
+ *
+ * ── Phase 2 (Revenue & Customer OS) additions ───────────────────────────
+ *
+ * Revenue/deal metrics now live in src/lib/revenue.ts (kept alias-free so it
+ * can be shared server-side). The SAME definitions are used by Pipeline,
+ * Analytics, Dashboard and the Copilot:
+ *
+ *   pipelineValue        MONEY: Σ dealValue over open deals (canonical stage
+ *                        not won/lost) — see computePipelineStats
+ *   weightedPipeline     MONEY ESTIMATE: Σ value × probability over open deals
+ *   wonRevenue           MONEY: Σ dealValue on won deals (all-time actual)
+ *   period won revenue   Dated by wonAt (§7 fix). Won deals that predate the
+ *                        timestamp are EXCLUDED from period numbers (and the
+ *                        exclusion count is disclosed) — never guessed at.
+ *   winRate              RATE: won ÷ (won + lost) — CLOSED deals only. Distinct
+ *                        from conversionRate (won ÷ all leads) above; labels
+ *                        never mix the two formulas.
+ *   avgDealSize          MONEY: won revenue ÷ won deals that have a value
+ *   salesCycle           DAYS: wonAt − createdAt, only where BOTH exist
+ *   dealFlags            Transparent stall/risk reasons with thresholds
+ *                        centralized in REVENUE_THRESHOLDS — no opaque scoring
+ *
+ * Clients are DERIVED in src/lib/clients.ts from won deals grouped by
+ * company/contact — no duplicate contact/company entity exists.
  */
 
 type Lead = Doc<"leads">;

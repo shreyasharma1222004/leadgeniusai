@@ -21,6 +21,7 @@ import { formatDateTime, initials, timeAgo } from "@/lib/format";
 import { useAnalyzeLead } from "@/lib/leads-client";
 import { money, nextBestAction } from "@/lib/growth";
 import { defaultProbability, weightedValue } from "@/lib/leadStatus";
+import { DEAL_FLAG_CLASSES, DEAL_FLAG_LABELS, dealFlags, dealTitle, lastActivityOf } from "@/lib/revenue";
 import { useEffect, useMemo } from "react";
 import {
   LEAD_STATUSES,
@@ -36,6 +37,8 @@ import {
   CalendarPlus,
   Check,
   CircleDollarSign,
+  FileText,
+  History,
   Loader2,
   Mail,
   MapPin,
@@ -46,6 +49,7 @@ import {
   Sparkles,
   Globe,
   StickyNote,
+  Trophy,
   X,
 } from "lucide-react";
 import { useState } from "react";
@@ -86,6 +90,18 @@ export default function LeadDetailPage() {
   const scheduleFollowUp = useMutation(api.leads.scheduleFollowUp);
   const setFollowUpStatus = useMutation(api.leads.setFollowUpStatus);
   const saveAnalysis = useMutation(api.leads.saveAnalysis);
+  const markWon = useMutation(api.leads.markWon);
+  const markLost = useMutation(api.leads.markLost);
+  const stageHistory = useQuery(
+    api.leads.stageHistoryForLead,
+    id ? { leadId: id as Id<"leads"> } : "skip",
+  );
+  const dealProposals = useQuery(
+    api.proposals.listForDeal,
+    id ? { dealId: id as Id<"leads"> } : "skip",
+  );
+  const [lostDialogOpen, setLostDialogOpen] = useState(false);
+  const [lossReason, setLossReason] = useState("");
 
   const handleAnalyze = async () => {
     if (!lead) return;
@@ -195,6 +211,35 @@ export default function LeadDetailPage() {
 
   const sortedFollowUps = [...(followUps ?? [])].sort((a, b) => a.dueAt - b.dueAt);
 
+  const handleMarkWon = async () => {
+    if (!lead) return;
+    try {
+      await markWon({ id: lead._id });
+      toast.success("Deal marked Won", {
+        description:
+          lead.dealValue !== undefined
+            ? `${money(lead.dealValue)} now counts as actual won revenue.`
+            : "Add a deal value so this counts toward revenue.",
+      });
+    } catch {
+      toast.error("Couldn't mark the deal Won — try again.");
+    }
+  };
+
+  const handleMarkLost = async () => {
+    if (!lead) return;
+    try {
+      await markLost({ id: lead._id, lossReason: lossReason.trim() || undefined });
+      setLostDialogOpen(false);
+      setLossReason("");
+      toast("Deal marked Lost");
+    } catch {
+      toast.error("Couldn't mark the deal Lost — try again.");
+    }
+  };
+
+  const isClosed = lead.status === "won" || lead.status === "lost";
+
   return (
     <AppShell
       title={
@@ -206,11 +251,21 @@ export default function LeadDetailPage() {
           >
             <ArrowLeft className="size-4" />
           </Link>
-          {lead.name}
+          {dealTitle(lead)}
         </span>
       }
       actions={
         <>
+          {!isClosed && (
+            <>
+              <Button variant="outline" className="text-[#53634a] hover:text-[#42503c]" onClick={() => void handleMarkWon()}>
+                <Trophy className="size-4" /> Mark Won
+              </Button>
+              <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setLostDialogOpen(true)}>
+                <X className="size-4" /> Mark Lost
+              </Button>
+            </>
+          )}
           <Button variant="outline" onClick={() => setComposerOpen(true)}>
             <Mail className="size-4" /> Compose outreach
           </Button>
@@ -479,6 +534,12 @@ export default function LeadDetailPage() {
             }
           }} />
 
+          {/* Proposals for this deal (Phase 2 §12) */}
+          <DealProposalsCard dealId={lead._id} proposals={dealProposals} />
+
+          {/* Stage history (Phase 2 §3) — recorded for new changes only */}
+          <StageHistoryCard history={stageHistory} />
+
           {/* Message thread */}
           <MessageThread leadId={lead._id} leadName={lead.name} onCompose={() => setComposerOpen(true)} />
 
@@ -615,6 +676,39 @@ export default function LeadDetailPage() {
         />
       )}
 
+      {/* Mark Lost dialog — captures an honest, optional loss reason (§5) */}
+      <Dialog open={lostDialogOpen} onOpenChange={setLostDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mark deal lost</DialogTitle>
+            <DialogDescription>
+              Records when this deal was lost. Adding a reason helps you spot
+              patterns later — it's optional.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="loss-reason">Why was it lost? (optional)</Label>
+              <Textarea
+                id="loss-reason"
+                value={lossReason}
+                onChange={(e) => setLossReason(e.target.value)}
+                placeholder="Went with an in-house solution / budget frozen / chose a cheaper vendor…"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLostDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void handleMarkLost()}>
+              Mark Lost
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Schedule follow-up dialog */}
       <Dialog open={followUpOpen} onOpenChange={setFollowUpOpen}>
         <DialogContent className="sm:max-w-md">
@@ -731,6 +825,93 @@ function MessageThread({
  );
 }
 
+/** Proposals linked to this deal (§12) — real records only. */
+function DealProposalsCard({
+  dealId,
+  proposals,
+}: {
+  dealId: Id<"leads">;
+  proposals: Doc<"proposals">[] | undefined;
+}) {
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <FileText className="size-4 text-muted-foreground" /> Proposals
+        </h2>
+        <Button asChild variant="outline" size="sm">
+          <Link to={`/proposals?deal=${dealId}`}>
+            <FileText className="size-3.5" /> Create proposal
+          </Link>
+        </Button>
+      </div>
+      {proposals === undefined ? (
+        <div className="mt-3 space-y-2">
+          <Skeleton className="h-10 w-full" />
+        </div>
+      ) : proposals.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          No proposals yet for this deal.
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {proposals.map((p) => (
+            <li key={p._id}>
+              <Link
+                to={`/proposals/${p._id}`}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 transition-colors hover:border-[#b3a894]"
+              >
+                <span className="min-w-0 truncate text-sm font-medium">{p.title}</span>
+                <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {p.value !== undefined && <span className="tabular">{money(p.value)}</span>}
+                  <span className="rounded-full border border-border bg-card px-2 py-0.5 capitalize">{p.status}</span>
+                  {p.sentAt !== undefined && <span>{timeAgo(p.sentAt)}</span>}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Stage history (§3) — only changes recorded after this feature shipped
+ * appear here; older deals show an honest "no history yet" note.
+ */
+function StageHistoryCard({ history }: { history: Doc<"dealStageHistory">[] | undefined }) {
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <h2 className="flex items-center gap-2 text-sm font-semibold">
+        <History className="size-4 text-muted-foreground" /> Stage history
+      </h2>
+      {history === undefined ? (
+        <div className="mt-3">
+          <Skeleton className="h-10 w-full" />
+        </div>
+      ) : history.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          No stage changes recorded yet — moves are tracked from now on.
+        </p>
+      ) : (
+        <ol className="mt-3 space-y-1.5">
+          {history.map((h) => (
+            <li key={h._id} className="flex items-center gap-2 text-sm">
+              <span className="tabular w-24 shrink-0 text-xs text-muted-foreground">
+                {formatDateTime(h.at)}
+              </span>
+              <span>
+                {h.from ? `${statusLabel(h.from)} → ${statusLabel(h.to)}` : `entered ${statusLabel(h.to)}`}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 /** Next Best Action — derived from measurable activity only (§13). */
 function NextBestActionCard({
   lead,
@@ -808,6 +989,8 @@ function DealCard({
     lead.probability,
     lead.status,
   );
+  const flags = lead.status !== "won" && lead.status !== "lost" ? dealFlags(lead) : [];
+  const last = lastActivityOf(lead);
 
   return (
     <section className="rounded-lg border border-border bg-card p-5">
@@ -819,6 +1002,33 @@ function DealCard({
           default {defaultProbability(lead.status)}% for {statusLabel(lead.status)} stage
         </span>
       </div>
+      {lead.wonAt !== undefined && (
+        <p className="mt-2 rounded-md border border-[#53634a]/40 bg-[#53634a]/[0.1] px-3 py-1.5 text-xs text-[#42503c]">
+          Won {formatDateTime(lead.wonAt)} — this value counts as actual won revenue.
+        </p>
+      )}
+      {lead.lostAt !== undefined && (
+        <p className="mt-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+          Lost {formatDateTime(lead.lostAt)}
+          {lead.lossReason ? ` — ${lead.lossReason}` : ""}
+        </p>
+      )}
+      {flags.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {flags.slice(0, 2).map((f) => (
+            <span
+              key={f.kind}
+              title={f.detail}
+              className={cn(
+                "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                DEAL_FLAG_CLASSES[f.kind],
+              )}
+            >
+              {DEAL_FLAG_LABELS[f.kind]} · {f.detail}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
         <div className="grid gap-1">
           <Label htmlFor="deal-value" className="text-xs">Deal value ($)</Label>
@@ -850,11 +1060,12 @@ function DealCard({
           />
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
           {lead.dealValue !== undefined
             ? `Weighted value ${money(weighted)} (value × probability) — an estimate, not a forecast promise.`
             : "Set a value so this deal counts toward pipeline and revenue."}
+          {last !== undefined && ` · Last activity ${timeAgo(last)}`}
         </p>
         <Button size="sm" className="h-7 text-xs" onClick={() => void save()} disabled={saving}>
           {saving ? <Loader2 className="size-3 animate-spin" /> : "Save"}

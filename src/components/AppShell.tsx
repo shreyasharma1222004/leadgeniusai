@@ -19,6 +19,8 @@ import {
   Bot,
   Building2,
   CalendarClock,
+  FileText,
+  Handshake,
   Inbox,
   Kanban,
   LayoutGrid,
@@ -46,36 +48,43 @@ interface NavItem {
 
 const NAV: { section: string; items: NavItem[] }[] = [
   {
-    section: "Overview",
+    section: "Growth",
     items: [
-      { label: "Dashboard", icon: House, to: "/dashboard" },
+      { label: "Overview", icon: House, to: "/dashboard" },
       { label: "AI Copilot", icon: Bot, to: "/assistant" },
       { label: "Business", icon: Building2, to: "/business" },
-    ],
-  },
-  {
-    section: "Find",
-    items: [
-      { label: "Leads", icon: Users, to: "/leads" },
       { label: "Research", icon: Sparkles, to: "/research" },
-      { label: "Contacts", icon: LayoutGrid, to: "/contacts" },
+      { label: "Leads", icon: Users, to: "/leads" },
     ],
   },
   {
-    section: "Sell",
+    section: "Revenue",
+    items: [
+      { label: "Pipeline", icon: Kanban, to: "/pipeline" },
+      { label: "Proposals", icon: FileText, to: "/proposals" },
+    ],
+  },
+  {
+    section: "Customers",
+    items: [
+      { label: "Contacts", icon: LayoutGrid, to: "/contacts" },
+      { label: "Clients", icon: Handshake, to: "/clients" },
+    ],
+  },
+  {
+    section: "Execution",
     items: [
       { label: "Outreach", icon: Send, to: "/campaigns" },
-      { label: "Inbox", icon: Inbox, to: "/inbox" },
       { label: "Campaigns", icon: Target, to: "/campaigns" },
-      { label: "Pipeline", icon: Kanban, to: "/pipeline" },
+      { label: "Inbox", icon: Inbox, to: "/inbox" },
+      { label: "Tasks", icon: CalendarClock, to: "/tasks" },
+      { label: "Templates", icon: BookMarked, to: "/templates" },
     ],
   },
   {
-    section: "Operate",
+    section: "Intelligence",
     items: [
-      { label: "Tasks", icon: CalendarClock, to: "/tasks" },
       { label: "Analytics", icon: BarChart3, to: "/analytics" },
-      { label: "Templates", icon: BookMarked, to: "/templates" },
       { label: "Integrations", icon: Plug, to: "/integrations" },
     ],
   },

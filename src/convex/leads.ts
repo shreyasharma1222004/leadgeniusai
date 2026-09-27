@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   LEAD_STATUS_VALUES,
   canonicalStatus,
@@ -28,7 +28,52 @@ const LEAD_FIELDS = {
   dealValue: v.optional(v.number()),
   probability: v.optional(v.number()),
   expectedCloseAt: v.optional(v.number()),
+  // Phase 2 deal fields (§3) — safe to set at creation too
+  dealName: v.optional(v.string()),
+  currency: v.optional(v.string()),
 };
+
+/**
+ * Stage-transition bookkeeping shared by setStatus / bulkSetStatus (§3/§5):
+ * writes wonAt/lostAt on closure, records a dealStageHistory row, and touches
+ * updatedAt/lastActivityAt. Guarded against contradictory states (§5): a Won
+ * deal cannot be re-marked Won, and closure timestamps are cleared when a
+ * closed deal is reopened so wonAt/lostAt never coexist.
+ */
+async function applyStageChange(
+  ctx: MutationCtx,
+  lead: Doc<"leads">,
+  to: string,
+): Promise<void> {
+  const from = canonicalStatus(lead.status);
+  const now = Date.now();
+  const patch: Record<string, unknown> = { status: to, updatedAt: now, lastActivityAt: now };
+
+  if (to === "won") {
+    if (lead.wonAt !== undefined) return; // already Won — no duplicate event
+    patch.wonAt = now;
+    patch.lostAt = undefined;
+    patch.lossReason = undefined;
+  } else if (to === "lost") {
+    if (lead.lostAt !== undefined) return;
+    patch.lostAt = now;
+    patch.wonAt = undefined;
+  } else {
+    // Reopening a closed deal clears the stale closure timestamp.
+    if (from === "won") patch.wonAt = undefined;
+    if (from === "lost") patch.lostAt = undefined;
+  }
+
+  await ctx.db.patch(lead._id, patch);
+  // Stage history is recorded for NEW changes only — never backfilled (§26).
+  await ctx.db.insert("dealStageHistory", {
+    userId: lead.userId,
+    leadId: lead._id,
+    from: from === to ? undefined : from,
+    to,
+    at: now,
+  });
+}
 
 async function requireUserId(ctx: MutationCtx) {
   const userId = await getAuthUserId(ctx);
@@ -169,7 +214,8 @@ export const setStatus = mutation({
     }
     const lead = await ctx.db.get(id);
     if (!lead || lead.userId !== userId) throw new Error("Lead not found.");
-    await ctx.db.patch(id, { status: canonical });
+    if (canonical === lead.status) return;
+    await applyStageChange(ctx, lead, canonical);
   },
 });
 
@@ -183,8 +229,78 @@ export const bulkSetStatus = mutation({
     }
     for (const id of ids) {
       const lead = await ctx.db.get(id);
-      if (lead && lead.userId === userId) await ctx.db.patch(id, { status: canonical });
+      if (lead && lead.userId === userId && canonical !== lead.status) {
+        await applyStageChange(ctx, lead, canonical);
+      }
     }
+  },
+});
+
+/**
+ * Mark a deal Won (§5): stage → won, wonAt = now, deal value PRESERVED, any
+ * contradictory lost state cleared. No value is invented — if the deal has no
+ * value, revenue math skips it until one is set.
+ */
+export const markWon = mutation({
+  args: { id: v.id("leads") },
+  handler: async (ctx, { id }) => {
+    const userId = await requireUserId(ctx);
+    const lead = await ctx.db.get(id);
+    if (!lead || lead.userId !== userId) throw new Error("Deal not found.");
+    if (canonicalStatus(lead.status) === "won") return { already: true };
+    await applyStageChange(ctx, lead, "won");
+    return { already: false };
+  },
+});
+
+/**
+ * Mark a deal Lost (§5): stage → lost, lostAt = now, optional loss reason.
+ * Pass { lossReason: "" } (or any empty string) to clear an existing reason.
+ */
+export const markLost = mutation({
+  args: { id: v.id("leads"), lossReason: v.optional(v.string()) },
+  handler: async (ctx, { id, lossReason }) => {
+    const userId = await requireUserId(ctx);
+    const lead = await ctx.db.get(id);
+    if (!lead || lead.userId !== userId) throw new Error("Deal not found.");
+    const now = Date.now();
+    if (canonicalStatus(lead.status) !== "lost") {
+      await applyStageChange(ctx, lead, "lost");
+    }
+    const reason = lossReason?.trim();
+    await ctx.db.patch(id, {
+      lossReason: reason ? reason : undefined,
+      updatedAt: now,
+    });
+    return { ok: true };
+  },
+});
+
+/** Stage-change history for one deal, oldest first (new events only — §26). */
+export const stageHistoryForLead = query({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, { leadId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const lead = await ctx.db.get(leadId);
+    if (!lead || lead.userId !== userId) return [];
+    return await ctx.db
+      .query("dealStageHistory")
+      .withIndex("by_lead", (q) => q.eq("leadId", leadId))
+      .collect();
+  },
+});
+
+/** All stage-change history for the workspace (pipeline health, revenue). */
+export const stageHistoryForUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    return await ctx.db
+      .query("dealStageHistory")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
   },
 });
 
@@ -224,6 +340,8 @@ export const updateDeal = mutation({
     companySize: v.optional(v.string()),
     revenue: v.optional(v.string()),
     intent: v.optional(v.string()),
+    dealName: v.optional(v.string()),
+    currency: v.optional(v.string()),
   },
   handler: async (ctx, { id, ...fields }) => {
     const userId = await requireUserId(ctx);
@@ -239,6 +357,7 @@ export const updateDeal = mutation({
     if (clean.dealValue !== undefined && (clean.dealValue as number) < 0) {
       throw new Error("Deal value can't be negative.");
     }
+    clean.updatedAt = Date.now();
     await ctx.db.patch(id, clean);
   },
 });
@@ -268,13 +387,23 @@ async function deleteLeadWithChildren(ctx: MutationCtx, id: Id<"leads">) {
   const followUps = await ctx.db
     .query("followUps")
     .withIndex("by_lead", (q) => q.eq("leadId", id))
-    .collect();
-  for (const f of followUps) await ctx.db.delete(f._id);
+    .collect();    for (const f of followUps) await ctx.db.delete(f._id);
   const notes = await ctx.db
     .query("notes")
     .withIndex("by_lead", (q) => q.eq("leadId", id))
     .collect();
   for (const n of notes) await ctx.db.delete(n._id);
+  // Phase 2 children: proposals + stage history are removed with the deal.
+  const proposals = await ctx.db
+    .query("proposals")
+    .withIndex("by_deal", (q) => q.eq("dealId", id))
+    .collect();
+  for (const p of proposals) await ctx.db.delete(p._id);
+  const history = await ctx.db
+    .query("dealStageHistory")
+    .withIndex("by_lead", (q) => q.eq("leadId", id))
+    .collect();
+  for (const h of history) await ctx.db.delete(h._id);
   await ctx.db.delete(id);
 }
 
@@ -284,6 +413,9 @@ export const addNote = mutation({
     const userId = await requireUserId(ctx);
     const lead = await ctx.db.get(leadId);
     if (!lead || lead.userId !== userId) throw new Error("Lead not found.");
+    const now = Date.now();
+    // Notes count as deal activity (§3 lastActivityAt) and bump updatedAt.
+    await ctx.db.patch(leadId, { lastActivityAt: now, updatedAt: now });
     return await ctx.db.insert("notes", {
       userId,
       leadId,
@@ -299,9 +431,11 @@ export const markContacted = mutation({
     const userId = await requireUserId(ctx);
     const lead = await ctx.db.get(id);
     if (!lead || lead.userId !== userId) throw new Error("Lead not found.");
+    const now = Date.now();
     await ctx.db.patch(id, {
       status: lead.status === "new" ? "contacted" : lead.status,
-      lastContactedAt: Date.now(),
+      lastContactedAt: now,
+      lastActivityAt: now,
     });
   },
 });
@@ -326,6 +460,42 @@ export const scheduleFollowUp = mutation({
     const current = lead.nextFollowUpAt ?? Number.MAX_SAFE_INTEGER;
     if (dueAt < current) await ctx.db.patch(leadId, { nextFollowUpAt: dueAt });
     return id;
+  },
+});
+
+/**
+ * Edit an existing follow-up (Phase 2 §5 "Add task" on the deal page).
+ * Ownership-checked; reschedules the lead's nextFollowUpAt when touched.
+ */
+export const updateFollowUp = mutation({
+  args: {
+    id: v.id("followUps"),
+    dueAt: v.optional(v.number()),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, ...fields }) => {
+    const userId = await requireUserId(ctx);
+    const followUp = await ctx.db.get(id);
+    if (!followUp || followUp.userId !== userId) {
+      throw new Error("Follow-up not found.");
+    }
+    const clean = Object.fromEntries(
+      Object.entries(fields).filter(([, value]) => value !== undefined),
+    );
+    await ctx.db.patch(id, clean);
+    if (clean.dueAt !== undefined) {
+      const lead = await ctx.db.get(followUp.leadId);
+      if (lead) {
+        const pending = (await ctx.db
+          .query("followUps")
+          .withIndex("by_lead", (q) => q.eq("leadId", followUp.leadId))
+          .collect())
+          .filter((f) => f.status === "pending")
+          .map((f) => f.dueAt)
+          .sort((a, b) => a - b);
+        await ctx.db.patch(followUp.leadId, { nextFollowUpAt: pending[0] });
+      }
+    }
   },
 });
 

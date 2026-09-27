@@ -6,6 +6,8 @@ import {
   BarChart3,
   Bot,
   CalendarClock,
+  FileText,
+  Handshake,
   House,
   Inbox,
   Kanban,
@@ -80,6 +82,12 @@ export function CommandPalette() {
         </CommandItem>
         <CommandItem onSelect={() => go("/pipeline")}>
           <Kanban className="size-4" /> Pipeline
+        </CommandItem>
+        <CommandItem onSelect={() => go("/proposals")}>
+          <FileText className="size-4" /> Proposals
+        </CommandItem>
+        <CommandItem onSelect={() => go("/clients")}>
+          <Handshake className="size-4" /> Clients
         </CommandItem>
         <CommandItem onSelect={() => go("/inbox")}>
           <Inbox className="size-4" /> Inbox

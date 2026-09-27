@@ -17,9 +17,10 @@ import { canonicalStatus, isQualified } from "./leadStatus";
  *  • If a metric can't be reliably derived (retention, qualitative custom
  *    goals), `current` is null and the UI labels it "unavailable" instead of
  *    inventing a number.
- *  • Period-scoped wins are dated by lead creation (the CRM has no separate
- *    won-at timestamp): "won deals whose lead was created in the period".
- *    This is a documented approximation, shown as such in the UI.
+ *  • Period-scoped revenue/customers are dated by wonAt where the timestamp
+ *    exists (Phase 2 §7). Won records that predate the timestamp keep the
+ *    documented Phase 1 approximation (dated by lead creation), and the basis
+ *    string says which is in effect — never silently mixed.
  */
 
 export const GOAL_KINDS = [
@@ -99,12 +100,25 @@ export interface GoalCurrentResult {
 
 type LeadRow = Pick<
   Doc<"leads">,
-  "status" | "dealValue" | "_creationTime" | "score"
+  "status" | "dealValue" | "_creationTime" | "score" | "wonAt"
 >;
 
-/** Whether a lead counts as created within the goal's period. */
+/**
+ * Whether a lead counts toward a period-scoped metric.
+ *
+ * Phase 2 (§7): deals closed AFTER wonAt existed are dated by their wonAt
+ * timestamp (the honest, correct basis — "closed in this period"). Older
+ * won/lost rows without a wonAt keep the documented Phase 1 approximation:
+ * they count in the period their lead was created, and the UI says so.
+ * Deals with neither (open deals) are excluded by the callers' status filters.
+ */
 function inPeriod(lead: LeadRow, start: number | null): boolean {
-  return start === null || lead._creationTime >= start;
+  if (start === null) return true;
+  const closedAt =
+    canonicalStatus(lead.status) === "won" && lead.wonAt !== undefined
+      ? lead.wonAt
+      : undefined;
+  return (closedAt ?? lead._creationTime) >= start;
 }
 
 /**
@@ -124,26 +138,33 @@ export function computeGoalCurrent(
     case "revenue": {
       const won = created.filter((l) => canonicalStatus(l.status) === "won");
       const valued = won.filter((l) => l.dealValue !== undefined);
+      const dated = won.filter((l) => l.wonAt !== undefined).length;
       return {
         current: won.reduce((s, l) => s + (l.dealValue ?? 0), 0),
         unit: "money",
         basis:
           period === "all_time"
             ? "sum of deal value on won deals"
-            : "deal value on won deals created this period",
+            : dated === won.length && won.length > 0
+              ? "deal value on deals closed (won) this period"
+              : "deal value on won deals created this period — older records predate won-at timestamps, so they're dated by lead creation",
         unavailableReason:
           won.length > 0 && valued.length === 0
             ? "Won deals exist but none have a deal value set — add values in Pipeline to track revenue."
             : undefined,
       };
-    }
-    case "customers": {
+    }    case "customers": {
       const won = created.filter((l) => canonicalStatus(l.status) === "won");
+      const dated = won.filter((l) => l.wonAt !== undefined).length;
       return {
         current: won.length,
         unit: "count",
         basis:
-          period === "all_time" ? "leads marked Won" : "leads created this period now marked Won",
+          period === "all_time"
+            ? "leads marked Won"
+            : dated === won.length && won.length > 0
+              ? "deals closed (won) this period"
+              : "leads created this period now marked Won",
       };
     }
     case "qualified_leads": {

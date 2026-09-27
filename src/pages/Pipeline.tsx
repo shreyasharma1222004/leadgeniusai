@@ -9,6 +9,7 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import { money } from "@/lib/growth";
+import { timeAgo } from "@/lib/format";
 import {
   LEAD_STATUS_LABELS,
   PIPELINE_ORDER,
@@ -17,15 +18,25 @@ import {
   statusClasses,
   weightedValue,
 } from "@/lib/leadStatus";
+import {
+  DEAL_FLAG_CLASSES,
+  DEAL_FLAG_LABELS,
+  dealFlags,
+  isOpenDeal,
+  lastActivityOf,
+  stageLastAtMap,
+} from "@/lib/revenue";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
-import { CircleDollarSign, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CircleDollarSign, Filter, Users, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
 type Lead = Doc<"leads">;
+
+type HealthFilter = "all" | "at_risk" | "stalled" | "closing" | "healthy";
 
 export default function PipelinePage() {
   const { isLoading: authLoading } = useAuth();
@@ -33,8 +44,15 @@ export default function PipelinePage() {
   const bulkSetStatus = useMutation(api.leads.bulkSetStatus);
   const updateDeal = useMutation(api.leads.updateDeal);
   const migrateStatuses = useMutation(api.leads.migrateStatuses);
+  const history = useQuery(api.leads.stageHistoryForUser, {});
+  const proposals = useQuery(api.proposals.list, {});
   const [dragId, setDragId] = useState<Id<"leads"> | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [minValue, setMinValue] = useState("");
+  const [closeWithin, setCloseWithin] = useState("");
+  const [health, setHealth] = useState<HealthFilter>("all");
+  const [source, setSource] = useState("");
 
   // One-time legacy-stage normalization (replied/meeting → discovery/proposal).
   // Idempotent: a no-op once every row is canonical. Read-time canonicalization
@@ -44,6 +62,12 @@ export default function PipelinePage() {
   useEffect(() => {
     if (hasLegacy) void migrateStatuses({});
   }, [hasLegacy, migrateStatuses]);
+
+  // Stage history → when each deal entered its current stage (for stall rules).
+  const stageLastAt = useMemo(
+    () => stageLastAtMap(history ?? []),
+    [history],
+  );
 
   if (authLoading || leads === undefined) {
     return (
@@ -76,6 +100,40 @@ export default function PipelinePage() {
     );
   }
 
+  const pendingProposals = new Set(
+    (proposals ?? [])
+      .filter((p) => p.status === "sent" || p.status === "viewed")
+      .map((p) => p.dealId),
+  );
+
+  const hasFilter =
+    minValue !== "" || closeWithin !== "" || health !== "all" || source.trim() !== "";
+
+  const matchesFilters = (lead: Lead) => {
+    if (minValue !== "" && (lead.dealValue ?? 0) < Number(minValue)) return false;
+    if (closeWithin !== "") {
+      // Undated deals are excluded when filtering by close window.
+      if (lead.expectedCloseAt === undefined) return false;
+      const days = (lead.expectedCloseAt - Date.now()) / 86_400_000;
+      if (days > Number(closeWithin)) return false;
+    }
+    if (source.trim() && (lead.source ?? "").toLowerCase() !== source.trim().toLowerCase())
+      return false;
+    if (health !== "all") {
+      if (!isOpenDeal(lead)) return false;
+      // Single source of truth: the same dealFlags the cards render.
+      const kinds = dealFlags(lead, {
+        lastStageAt: stageLastAt.get(lead._id as string),
+        proposalPending: pendingProposals.has(lead._id),
+      }).map((f) => f.kind);
+      if (health === "at_risk" && !kinds.includes("closePassed")) return false;
+      if (health === "stalled" && !kinds.includes("stalled")) return false;
+      if (health === "closing" && !kinds.includes("closeSoon")) return false;
+      if (health === "healthy" && kinds.length > 0) return false;
+    }
+    return true;
+  };
+
   const handleDrop = async (status: string) => {
     setOverColumn(null);
     if (!dragId) return;
@@ -100,19 +158,22 @@ export default function PipelinePage() {
   // Group by canonical stage so legacy rows (replied/meeting/qualified/
   // negotiation) always land in a visible column.
   const byCanonicalStage = (status: string) =>
-    leads.filter((l) => canonicalStatus(l.status) === status);
+    leads.filter((l) => canonicalStatus(l.status) === status && matchesFilters(l));
 
-  // Column totals
+  // Column totals — computed on the UNFILTERED open set so header money stays
+  // true regardless of view filters (§27: one definition everywhere).
   const colTotal = (status: string) =>
-    byCanonicalStage(status).reduce((s, l) => s + (l.dealValue ?? 0), 0);
+    leads
+      .filter((l) => canonicalStatus(l.status) === status)
+      .reduce((s, l) => s + (l.dealValue ?? 0), 0);
   const weightedTotal = leads
-    .filter((l) => !["won", "lost"].includes(canonicalStatus(l.status)))
+    .filter((l) => isOpenDeal(l))
     .reduce(
       (s, l) => s + weightedValue(l.dealValue, l.probability, canonicalStatus(l.status)),
       0,
     );
   const pipelineTotal = leads
-    .filter((l) => !["won", "lost"].includes(canonicalStatus(l.status)))
+    .filter((l) => isOpenDeal(l))
     .reduce((s, l) => s + (l.dealValue ?? 0), 0);
 
   return (
@@ -125,8 +186,17 @@ export default function PipelinePage() {
           </span>
           <span className="hidden md:inline">
             Weighted <span className="tabular font-semibold text-foreground">{money(weightedTotal)}</span>
+            <span className="ml-1 text-[10px] text-muted-foreground/60">(estimate)</span>
           </span>
-          <span className="text-[10px] text-muted-foreground/60">weighted = value × estimated probability</span>
+          <Button
+            variant={hasFilter ? "default" : "outline"}
+            size="sm"
+            className="h-8"
+            onClick={() => setFiltersOpen((o) => !o)}
+          >
+            <Filter className="size-3.5" /> Filters
+            {hasFilter && <X className="size-3" onClick={(e) => { e.stopPropagation(); setMinValue(""); setCloseWithin(""); setHealth("all"); setSource(""); }} />}
+          </Button>
         </div>
       }
     >
@@ -134,6 +204,39 @@ export default function PipelinePage() {
         Drag cards between stages. Click the value pill on a card to set deal value, probability and
         expected close date.
       </p>
+
+      {filtersOpen && (
+        <div className="mb-4 grid gap-3 rounded-lg border border-border bg-card p-3 sm:grid-cols-4">
+          <div className="grid gap-1">
+            <Label htmlFor="f-min" className="text-xs">Min value ($)</Label>
+            <Input id="f-min" value={minValue} onChange={(e) => setMinValue(e.target.value.replace(/[^0-9]/g, ""))} placeholder="e.g. 5000" className="h-8 text-sm" />
+          </div>
+          <div className="grid gap-1">
+            <Label htmlFor="f-close" className="text-xs">Close within (days)</Label>
+            <Input id="f-close" value={closeWithin} onChange={(e) => setCloseWithin(e.target.value.replace(/[^0-9]/g, ""))} placeholder="e.g. 14" className="h-8 text-sm" />
+          </div>
+          <div className="grid gap-1">
+            <Label htmlFor="f-health" className="text-xs">Health</Label>
+            <select
+              id="f-health"
+              value={health}
+              onChange={(e) => setHealth(e.target.value as HealthFilter)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+            >
+              <option value="all">All</option>
+              <option value="at_risk">Close date passed</option>
+              <option value="stalled">Stalled (14+ days quiet)</option>
+              <option value="closing">Closing soon</option>
+              <option value="healthy">Active</option>
+            </select>
+          </div>
+          <div className="grid gap-1">
+            <Label htmlFor="f-source" className="text-xs">Source</Label>
+            <Input id="f-source" value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. Referral" className="h-8 text-sm" />
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-3 overflow-x-auto pb-4">
         {PIPELINE_ORDER.map((status) => {
           const columnLeads = byCanonicalStage(status);
@@ -185,7 +288,7 @@ export default function PipelinePage() {
               <div className="flex min-h-[120px] flex-1 flex-col gap-2 p-2">
                 {columnLeads.length === 0 && (
                   <p className="px-2 py-6 text-center text-xs text-muted-foreground/60">
-                    Drop cards here
+                    {hasFilter ? "No matches here" : "Drop cards here"}
                   </p>
                 )}
                 {columnLeads.map((lead: Lead) => (
@@ -195,6 +298,8 @@ export default function PipelinePage() {
                     dragging={dragId === lead._id}
                     onDragStart={() => setDragId(lead._id)}
                     onDragEnd={() => setDragId(null)}
+                    proposalPending={pendingProposals.has(lead._id)}
+                    lastStageAt={stageLastAt.get(lead._id as string)}
                     onSaveDeal={async (fields) => {
                       try {
                         await updateDeal({ id: lead._id, ...fields });
@@ -214,13 +319,15 @@ export default function PipelinePage() {
   );
 }
 
-/** One deal card with inline value editing (§17). */
+/** One deal card with inline value editing (§17) and health flags (§23). */
 function DealCard({
   lead,
   dragging,
   onDragStart,
   onDragEnd,
   onSaveDeal,
+  proposalPending,
+  lastStageAt,
 }: {
   lead: Lead;
   dragging: boolean;
@@ -231,6 +338,8 @@ function DealCard({
     probability?: number;
     expectedCloseAt?: number;
   }) => Promise<void>;
+  proposalPending: boolean;
+  lastStageAt?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(lead.dealValue?.toString() ?? "");
@@ -238,6 +347,14 @@ function DealCard({
   const [closeDate, setCloseDate] = useState(
     lead.expectedCloseAt ? new Date(lead.expectedCloseAt).toISOString().slice(0, 10) : "",
   );
+
+  const isOpen = isOpenDeal(lead);
+  // At most ONE flag on the card — avoid badge spam (§23). Priority:
+  // close passed > stalled > closing soon > proposal pending.
+  const flag = isOpen
+    ? dealFlags(lead, { lastStageAt, proposalPending })[0]
+    : undefined;
+  const last = lastActivityOf(lead);
 
   const save = async () => {
     const parsedValue = value.trim() ? Number(value.replace(/[^0-9.]/g, "")) : undefined;
@@ -364,6 +481,22 @@ function DealCard({
             : `${defaultProbability(canonicalStatus(lead.status))}% est.`}
         </span>
       </div>
+
+      {flag && (
+        <span
+          title={flag.detail}
+          className={cn(
+            "mt-2 inline-flex max-w-full items-center truncate rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+            DEAL_FLAG_CLASSES[flag.kind],
+          )}
+        >
+          {DEAL_FLAG_LABELS[flag.kind]} · {flag.detail}
+        </span>
+      )}
+
+      {!flag && last !== undefined && (
+        <p className="mt-2 text-[10px] text-muted-foreground/60">Last activity {timeAgo(last)}</p>
+      )}
 
       {lead.score !== undefined && (
         <span className="mt-2 block h-0.5 overflow-hidden rounded-full bg-[#e4ddcf]">

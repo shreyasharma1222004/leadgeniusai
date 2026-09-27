@@ -1,6 +1,15 @@
 import type { Doc } from "@/convex/_generated/dataModel";
 import { LEAD_STATUS_LABELS, type LeadStatus } from "@/lib/leadStatus";
 import { timeAgo } from "@/lib/format";
+import { money } from "@/lib/growth";
+import {
+  computeClosedStats,
+  computePipelineStats,
+  dealTitle,
+  isOpenDeal,
+  lastActivityOf,
+} from "@/lib/revenue";
+import type { Client } from "@/lib/clients";
 
 type Lead = Doc<"leads">;
 type Message = Doc<"messages">;
@@ -14,10 +23,17 @@ export interface AssistantReply {
   leadIds: string[];
 }
 
-/**
- * Business context (Phase 1 §7) — profile + goals the Copilot can reason
- * over. All values come from the caller's own workspace; nothing invented.
- */
+/** Minimal proposal shape the Copilot needs (avoids circular imports). */
+export interface CopilotProposal {
+  _id: string;
+  title: string;
+  status: string;
+  value?: number;
+  dealId: string;
+  sentAt?: number;
+}
+
+/** Business + revenue context (Phase 1 §7 + Phase 2 §20) — all real data. */
 export interface CopilotContext {
   businessName?: string;
   industry?: string;
@@ -36,6 +52,10 @@ export interface CopilotContext {
     progress: number | null;
     unavailableReason?: string;
   }[];
+  /** Phase 2: derived clients (from won deals) for retention questions. */
+  clients?: Client[];
+  /** Phase 2: persisted proposals. */
+  proposals?: CopilotProposal[];
 }
 
 /**
@@ -54,10 +74,178 @@ export function askAssistant(
 
   const leadIds = (list: Lead[]) => list.slice(0, 8).map((l) => l._id);
 
+  // ── Phase 2: proposals ────────────────────────────────────────────────
+  if (context?.proposals && /\b(proposal)/.test(q)) {
+    const ps = context.proposals;
+    const waiting = ps.filter((p) => p.status === "sent" || p.status === "viewed");
+    const drafts = ps.filter((p) => p.status === "draft");
+    const decided = ps.filter((p) => p.status === "accepted" || p.status === "rejected");
+    if (ps.length === 0) {
+      return {
+        intent: "proposals",
+        text: "No proposals yet. Create one from an active deal — the deal page has a “Create proposal” action.",
+        bullets: [],
+        leadIds: [],
+      };
+    }
+    const titleOf = (p: CopilotProposal) =>
+      `${p.title}${p.value !== undefined ? ` · ${money(p.value)}` : ""}`;
+    return {
+      intent: "proposals",
+      text:
+        waiting.length > 0
+          ? `${waiting.length} proposal${waiting.length === 1 ? "" : "s"} waiting for a response${drafts.length ? `, ${drafts.length} draft${drafts.length === 1 ? "" : "s"}` : ""}:`
+          : drafts.length > 0
+            ? `${drafts.length} proposal draft${drafts.length === 1 ? "" : "s"} not sent yet:`
+            : `${decided.length} proposal${decided.length === 1 ? "" : "s"} decided:`,
+      bullets: [
+        ...waiting.map(
+          (p) => `WAITING: ${titleOf(p)} — sent ${p.sentAt ? timeAgo(p.sentAt) : "(sent time not recorded)"}`,
+        ),
+        ...drafts.slice(0, 3).map((p) => `DRAFT: ${titleOf(p)}`),
+        ...decided
+          .slice(0, 3)
+          .map((p) => `${p.status === "accepted" ? "ACCEPTED" : "REJECTED"}: ${titleOf(p)}`),
+      ].slice(0, 8),
+      leadIds: [...waiting, ...drafts].slice(0, 5).map((p) => p.dealId),
+    };
+  }
+
+  // ── Phase 2: clients / retention ──────────────────────────────────────
+  if (context?.clients && /\b(client|clients|customer|retention|churn|expansion|quiet client)/.test(q)) {
+    const clients = context.clients;
+    if (clients.length === 0) {
+      return {
+        intent: "clients",
+        text: "No clients yet — clients appear here when a deal is marked Won.",
+        bullets: [],
+        leadIds: [],
+      };
+    }
+
+    // "highest-value / most revenue" question
+    if (/\b(highest|most|top|revenue|value|biggest)/.test(q)) {
+      const top = [...clients].sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, 5);
+      return {
+        intent: "clients",
+        text: "Your highest-revenue clients:",
+        bullets: top.map(
+          (c) =>
+            `${c.name} — ${money(c.totalRevenue)} recorded across ${c.wonDeals.length} won deal${c.wonDeals.length === 1 ? "" : "s"}`,
+        ),
+        leadIds: top.map((c) => c.primaryLead._id),
+      };
+    }
+
+    // Attention / at-risk / quiet / gone-quiet questions
+    if (/\b(attention|at.?risk|risk|quiet|gone|churn|retention|need)/.test(q)) {
+      const risky = clients
+        .filter((c) => c.health.state !== "healthy")
+        .sort((a, b) => (a.lastActivityAt ?? 0) - (b.lastActivityAt ?? 0));
+      if (risky.length === 0) {
+        return {
+          intent: "clients",
+          text: "No clients need attention — every client has recent activity or upcoming work.",
+          bullets: [],
+          leadIds: [],
+        };
+      }
+      return {
+        intent: "clients",
+        text: `${risky.length} client${risky.length === 1 ? "" : "s"} need attention:`,
+        bullets: risky
+          .slice(0, 6)
+          .map((c) => `${c.name} — ${c.health.detail}`),
+        leadIds: risky.slice(0, 6).map((c) => c.primaryLead._id),
+      };
+    }
+
+    // General client overview
+    const withRevenue = clients.filter((c) => c.totalRevenue > 0);
+    return {
+      intent: "clients",
+      text: `You have ${clients.length} client${clients.length === 1 ? "" : "s"} (${withRevenue.filter((c) => c.totalRevenue > 0).length} with recorded revenue):`,
+      bullets: clients
+        .slice(0, 6)
+        .map(
+          (c) =>
+            `${c.name} — ${money(c.totalRevenue)} won · ${c.activeDeals.length} active deal${c.activeDeals.length === 1 ? "" : "s"} · ${c.health.detail}`,
+        ),
+      leadIds: clients.slice(0, 6).map((c) => c.primaryLead._id),
+    };
+  }
+
+  // ── Phase 2: weighted pipeline / forecast questions ───────────────────
+  if (/\b(weighted|forecast|projection|predict|how much.*pipeline|pipeline.*worth)/.test(q)) {
+    const closed = computeClosedStats(leads);
+    const pipe = computePipelineStats(leads);
+    if (pipe.openDeals === 0 && closed.wonCount === 0) {
+      return {
+        intent: "revenue",
+        text: "I don't have enough data in your workspace to answer that yet — there are no open deals and no closed revenue.",
+        bullets: ["Add deals with values in the Pipeline view and weighted numbers appear here."],
+        leadIds: [],
+      };
+    }
+    return {
+      intent: "revenue",
+      text: "Revenue picture (weighted numbers are estimates, not guarantees):",
+      bullets: [
+        `Pipeline value: ${money(pipe.pipelineValue)} across ${pipe.openDeals} open deal${pipe.openDeals === 1 ? "" : "s"}`,
+        `Weighted pipeline: ${money(pipe.weightedPipeline)} — estimate based on current deal probabilities`,
+        `Actual won revenue: ${money(closed.wonRevenue)} across ${closed.wonCount} deal${closed.wonCount === 1 ? "" : "s"}`,
+        closed.winRate !== null
+          ? `Closed-deal win rate: ${closed.winRate}% (won ÷ (won + lost))`
+          : "Win rate: not enough data yet — no closed deals",
+      ],
+      leadIds: [],
+    };
+  }
+
+  // ── Phase 2: stalled deals (replaces the Phase 1 rule with threshold-based) ─
+  if (/\b(stalled?|cold|quiet|ghost|no repl(y|ies)|not responded|neglect|leaking)/.test(q)) {
+    const now = Date.now();
+    const stalled = leads
+      .filter(isOpenDeal)
+      .filter((l) => {
+        const last = lastActivityOf(l);
+        return last !== undefined && now - last > 14 * 86400_000;
+      })
+      .sort((a, b) => (lastActivityOf(a) ?? 0) - (lastActivityOf(b) ?? 0))
+      .slice(0, 6);
+    // "Where is my pipeline leaking" blends stall + no-value + no-close-date gaps.
+    if (/\b(leak)/.test(q)) {
+      const noValue = leads.filter(isOpenDeal).filter((l) => l.dealValue === undefined).length;
+      const noDate = leads.filter(isOpenDeal).filter((l) => l.expectedCloseAt === undefined).length;
+      return {
+        intent: "stalled",
+        text: "Where your pipeline is leaking, from the records:",
+        bullets: [
+          `${stalled.length} open deal${stalled.length === 1 ? "" : "s"} with no activity for 14+ days`,
+          `${noValue} open deal${noValue === 1 ? "" : "s"} with no value set — they don't count toward pipeline`,
+          `${noDate} open deal${noDate === 1 ? "" : "s"} with no expected close date — the forecast can't place them`,
+        ],
+        leadIds: leadIds(stalled),
+      };
+    }
+    return {
+      intent: "stalled",
+      text:
+        stalled.length > 0
+          ? `${stalled.length} open deal${stalled.length === 1 ? " is" : "s are"} stalled — no activity for 14+ days (centralized threshold):`
+          : "No stalled deals — every open deal has activity within the last 14 days (or no activity has ever been recorded, which I flag as never-contacted, not stalled).",
+      bullets: stalled.map(
+        (l) =>
+          `${dealTitle(l)} — ${money(l.dealValue)} · last activity ${timeAgo(lastActivityOf(l))}`,
+      ),
+      leadIds: leadIds(stalled),
+    };
+  }
+
   // Hot / best leads
   if (/\b(hot|best|top|priority|focus|high score|strongest)\b/.test(q)) {
     const hot = leads
-      .filter((l) => !["won", "lost"].includes(l.status))
+      .filter(isOpenDeal)
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
       .slice(0, 5);
     return {
@@ -130,7 +318,7 @@ export function askAssistant(
       text:
         received.length === 0
           ? "No replies logged yet. When leads respond, log them from the lead page — they'll show here."
-          : `${received.length} repl${received.length === 1 ? "y" : "ies"} logged, ${unread.length} unread:`,
+          : `${received.length} repl${received.length === 1 ? "" : "ies"} logged, ${unread.length} unread:`,
       bullets: received
         .slice(0, 6)
         .map((m) => `${unread.includes(m) ? "● " : ""}${nameOf(m.leadId)}: "${m.body.slice(0, 80)}${m.body.length > 80 ? "…" : ""}"`),
@@ -156,31 +344,6 @@ export function askAssistant(
         .slice(0, 6)
         .map((c) => `${c.name} — ${c.status}${c.status === "active" ? " (send pending recipients from the campaign page)" : ""}`),
       leadIds: [],
-    };
-  }
-
-  // Stalled leads
-  if (/\b(stalled?|cold|quiet|ghost|no repl(y|ies)|not responded|neglect)\b/.test(q)) {
-    const now = Date.now();
-    const stalled = leads
-      .filter(
-        (l) =>
-          !["won", "lost", "new"].includes(l.status) &&
-          l.lastContactedAt !== undefined &&
-          now - l.lastContactedAt > 7 * 86400_000,
-      )
-      .sort((a, b) => (a.lastContactedAt ?? 0) - (b.lastContactedAt ?? 0))
-      .slice(0, 6);
-    return {
-      intent: "stalled",
-      text:
-        stalled.length > 0
-          ? `${stalled.length} lead${stalled.length === 1 ? " is" : "s are"} going cold — contacted over a week ago with no next step:`
-          : "No stalled leads — everything contacted recently is either fresh or has a follow-up scheduled.",
-      bullets: stalled.map(
-        (l) => `${l.name}${l.company ? ` (${l.company})` : ""} — last touch ${timeAgo(l.lastContactedAt)}`,
-      ),
-      leadIds: leadIds(stalled),
     };
   }
 
@@ -232,7 +395,7 @@ export function askAssistant(
   // Hottest opportunities by deal value (§27)
   if (/\b(opportunit|deal value|biggest deal|highest.value|worth the most)\b/.test(q)) {
     const valued = leads
-      .filter((l) => !["won", "lost"].includes(l.status) && l.dealValue !== undefined)
+      .filter((l) => isOpenDeal(l) && l.dealValue !== undefined)
       .sort((a, b) => (b.dealValue ?? 0) - (a.dealValue ?? 0))
       .slice(0, 5);
     if (valued.length === 0)
@@ -247,7 +410,7 @@ export function askAssistant(
       text: "Your most valuable open opportunities:",
       bullets: valued.map(
         (l) =>
-          `${l.name}${l.company ? ` (${l.company})` : ""} — $${(l.dealValue ?? 0).toLocaleString()} · ${LEAD_STATUS_LABELS[l.status as LeadStatus] ?? l.status}`,
+          `${dealTitle(l)} — ${money(l.dealValue)} · ${LEAD_STATUS_LABELS[l.status as LeadStatus] ?? l.status}`,
       ),
       leadIds: valued.map((l) => l._id),
     };
@@ -265,8 +428,8 @@ export function askAssistant(
           ? "No closed-won deals yet. When you move a lead to Won, the revenue shows up here."
           : valued.length === 0
             ? `${won.length} deal${won.length === 1 ? "" : "s"} won — add deal values in Pipeline to see revenue.`
-            : `${won.length} deal${won.length === 1 ? "" : "s"} won, $${total.toLocaleString()} in recorded revenue:`,
-      bullets: valued.map((l) => `${l.name} — $${(l.dealValue ?? 0).toLocaleString()}`),
+            : `${won.length} deal${won.length === 1 ? "" : "s"} won, ${money(total)} in recorded revenue:`,
+      bullets: valued.map((l) => `${dealTitle(l)} — ${money(l.dealValue)}`),
       leadIds: valued.slice(0, 5).map((l) => l._id),
     };
   }
@@ -373,7 +536,7 @@ export function askAssistant(
   }
 
   // Default: quick overview + hint
-  const open = leads.filter((l) => !["won", "lost"].includes(l.status)).length;
+  const open = leads.filter(isOpenDeal).length;
   const unread = messages.filter((m) => m.direction === "received" && !m.readAt).length;
   const due = followUps.filter((f) => f.status === "pending" && f.dueAt <= Date.now() + 86400_000).length;
   return {
@@ -383,7 +546,7 @@ export function askAssistant(
       `${leads.length} leads total, ${open} still open`,
       `${unread} unread repl${unread === 1 ? "y" : "ies"}`,
       `${due} follow-up${due === 1 ? "" : "s"} due in 24h`,
-      "Try asking: “my hottest leads”, “what's due today”, “any stalled leads”, “pipeline summary”",
+      "Try asking: “my hottest leads”, “what's due today”, “any stalled leads”, “weighted pipeline”, “which clients need attention”",
     ],
     leadIds: [],
   };

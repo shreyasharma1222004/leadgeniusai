@@ -88,10 +88,80 @@ const schema = defineSchema(
       companySize: v.optional(v.string()),
       revenue: v.optional(v.string()),
       intent: v.optional(v.string()), // high | medium | low (free text preserved)
+
+      // ── Phase 2: proper Deal entity (§3) — extends the existing record ──
+      // Optional display name for the deal; falls back to "name @ company".
+      dealName: v.optional(v.string()),
+      currency: v.optional(v.string()), // ISO code, e.g. "USD"; optional
+      // Campaign attribution when the deal originated from a campaign send.
+      campaignId: v.optional(v.id("campaigns")),
+      // Closure timestamps — written ONLY by markWon/markLost (§5). Never
+      // fabricated for historical rows: existing won/lost records keep these
+      // undefined and revenue math falls back to documented behavior.
+      wonAt: v.optional(v.number()),
+      lostAt: v.optional(v.number()),
+      lossReason: v.optional(v.string()),
+      updatedAt: v.optional(v.number()),
+      // General "anything happened" timestamp (notes, messages, stage moves,
+      // follow-ups). Older records only have lastContactedAt; health logic
+      // reads both and never invents a value for rows that lack them.
+      lastActivityAt: v.optional(v.number()),
+      // nextActivityAt is intentionally NOT a separate column: the existing
+      // nextFollowUpAt field already stores the next scheduled activity time
+      // and is maintained by scheduleFollowUp/setFollowUpStatus.
     })
       .index("by_user", ["userId"])
       .index("by_user_status", ["userId", "status"])
       .index("by_user_followup", ["userId", "nextFollowUpAt"]),
+
+    /**
+     * Phase 2 (§3): persisted stage transitions for deals. Recorded ONLY for
+     * changes made after this feature shipped — no backfill, no fabricated
+     * history for pre-existing records. `from` is undefined when the change
+     * is the first one recorded for a deal.
+     */
+    dealStageHistory: defineTable({
+      userId: v.id("users"),
+      leadId: v.id("leads"),
+      from: v.optional(v.string()), // canonical stage before the move
+      to: v.string(), // canonical stage after the move
+      at: v.number(),
+    })
+      .index("by_lead", ["leadId", "at"])
+      .index("by_user", ["userId", "at"]),
+
+    /**
+     * Phase 2 (§12): persisted proposals linked to a deal. Status lifecycle:
+     * draft → sent → viewed → accepted/rejected. `viewedAt` exists for the
+     * day real view tracking is added — it is NEVER written automatically
+     * (no fake tracking), so viewed proposals won't appear until then.
+     */
+    proposals: defineTable({
+      userId: v.id("users"),
+      dealId: v.id("leads"),
+      title: v.string(),
+      // draft | sent | viewed | accepted | rejected
+      status: v.string(),
+      value: v.optional(v.number()),
+      currency: v.optional(v.string()),
+      summary: v.optional(v.string()), // Executive summary
+      problem: v.optional(v.string()),
+      solution: v.optional(v.string()),
+      deliverables: v.optional(v.array(v.string())),
+      timeline: v.optional(v.string()),
+      pricing: v.optional(v.string()),
+      outcomes: v.optional(v.string()), // Expected outcomes
+      nextSteps: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      sentAt: v.optional(v.number()),
+      viewedAt: v.optional(v.number()), // reserved — never auto-written
+      acceptedAt: v.optional(v.number()),
+      rejectedAt: v.optional(v.number()),
+      rejectedReason: v.optional(v.string()),
+    })
+      .index("by_user", ["userId"])
+      .index("by_deal", ["dealId"]),
 
     followUps: defineTable({
       userId: v.id("users"),

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
 import { askAssistant, type CopilotContext } from "@/lib/assistant";
+import { computeClients } from "@/lib/clients";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useQuery } from "convex/react";
@@ -19,11 +20,13 @@ interface Turn {
 
 const SUGGESTIONS = [
   "What should I work on today?",
-  "What is blocking my growth?",
+  "What is my weighted pipeline?",
+  "Any stalled deals?",
+  "Which clients need attention?",
+  "What proposals are waiting for action?",
+  "Which client generated the most revenue?",
   "Am I on track for my goals?",
-  "Which opportunities deserve attention?",
-  "Any stalled leads?",
-  "What should I improve?",
+  "What is blocking my growth?",
 ];
 
 export default function AssistantPage() {
@@ -34,6 +37,7 @@ export default function AssistantPage() {
   const campaigns = useQuery(api.campaigns.list, {});
   const profile = useQuery(api.business.myProfile, {});
   const goals = useQuery(api.business.goalsWithProgress, {});
+  const proposals = useQuery(api.proposals.list, {});
   const { user } = useAuth();
 
   const growthGoalLabel =
@@ -60,8 +64,9 @@ export default function AssistantPage() {
 
   // Business context (Phase 1 §7) — profile + goals feed the Copilot so its
   // answers use what the business sells, who it targets, and real goal math.
+  // Phase 2 (§20) adds revenue context: derived clients + persisted proposals.
   const context: CopilotContext | undefined =
-    profile !== undefined
+    profile !== undefined && proposals !== undefined
       ? {
           businessName: profile?.businessName,
           industry: profile?.industry,
@@ -79,6 +84,15 @@ export default function AssistantPage() {
             formatted: g.formatted,
             progress: g.progress,
             unavailableReason: g.unavailableReason,
+          })),
+          clients: leads !== undefined ? computeClients(leads, profile?.products) : [],
+          proposals: (proposals ?? []).map((p) => ({
+            _id: p._id,
+            title: p.title,
+            status: p.status,
+            value: p.value,
+            dealId: p.dealId,
+            sentAt: p.sentAt,
           })),
         }
       : undefined;
@@ -220,7 +234,7 @@ export default function AssistantPage() {
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about your leads, follow-ups, replies…"
+              placeholder="Ask about deals, revenue, clients, proposals…"
               aria-label="Ask the assistant"
             />
             <Button type="submit" size="icon" disabled={!input.trim() || !ready} aria-label="Send question">

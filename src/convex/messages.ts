@@ -67,6 +67,8 @@ export const logOutbound = mutation({
     if (userId === null) throw new Error("You need to sign in to do that.");
     const lead = await ctx.db.get(leadId);
     if (!lead || lead.userId !== userId) throw new Error("Lead not found.");
+    // A sent message is deal activity (Phase 2 §3 lastActivityAt).
+    await ctx.db.patch(leadId, { lastActivityAt: Date.now() });
     return await ctx.db.insert("messages", {
       userId,
       leadId,
@@ -93,8 +95,10 @@ export const logInbound = mutation({
     if (!lead || lead.userId !== userId) throw new Error("Lead not found.");
     // A reply means they engaged: advance the lead into Discovery (a real
     // pipeline stage — never write legacy values like "replied" here).
-    const updates: { status?: string; lastContactedAt: number } = {
-      lastContactedAt: Date.now(),
+    const now = Date.now();
+    const updates: { status?: string; lastContactedAt: number; lastActivityAt: number } = {
+      lastContactedAt: now,
+      lastActivityAt: now,
     };
     if (lead.status === "contacted" || lead.status === "new") {
       updates.status = "discovery";
