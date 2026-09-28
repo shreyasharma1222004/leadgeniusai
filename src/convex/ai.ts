@@ -31,6 +31,263 @@ const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 
 export type CopilotToolCall = { name: string; args: Record<string, unknown> };
 
+// ── Native OpenAI tool-calling (Phase 2c-4A) ────────────────────────────────
+//
+// The five tested read-only tools are now exposed to the model through
+// native OpenAI tool definitions. The JSON schemas are a CONVENIENCE for the
+// model — they are NOT a security boundary. Every tool call still flows
+// through parseNormalizedToolCall (strict parsing), detectSingleToolCall
+// (one-call limit), and runCopilotTool (the fixed whitelist dispatcher,
+// unchanged) whose tool implementations re-validate every argument and scope
+// every read to the authenticated user.
+
+/**
+ * Strict-JSON-Schema subset used by these definitions. `additionalProperties:
+ * false` plus closed enums keeps the model inside the argument shapes the
+ * server-side parsers accept; the parsers remain authoritative regardless.
+ */
+type ToolSchemaObject = {
+  type: "object";
+  properties?: Record<string, unknown>;
+  required?: string[];
+  additionalProperties: false;
+};
+
+const intSchema: ToolSchemaObject = {
+  type: "object",
+  properties: { limit: { type: "integer", minimum: 0 } },
+  additionalProperties: false,
+};
+
+/**
+ * The canonical Copilot tool set — the ONLY tools the model can see. Tool
+ * names here are the exact whitelist the dispatcher accepts.
+ */
+export const COPILOT_TOOLS: {
+  type: "function";
+  function: { name: string; description: string; parameters: ToolSchemaObject };
+}[] = [
+  {
+    type: "function",
+    function: {
+      name: "get_deal",
+      description:
+        "Inspect ONE specific deal by its internal id, including stage, status, value, currency, probability, weighted value and activity timestamps.",
+      parameters: {
+        type: "object",
+        properties: { dealId: { type: "string" } },
+        required: ["dealId"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_client",
+      description:
+        "Inspect ONE specific client by its stable client key, including revenue, deal counts, health and its deals.",
+      parameters: {
+        type: "object",
+        properties: { clientKey: { type: "string" } },
+        required: ["clientKey"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_clients",
+      description:
+        "List the workspace's clients with optional sorting (revenue default, activity, name), optional filtering (has active deals / has recorded revenue) and a bounded limit (max 20).",
+      parameters: {
+        type: "object",
+        properties: {
+          sort: { type: "string", enum: ["revenue", "activity", "name"] },
+          filter: {
+            type: "object",
+            properties: {
+              hasActiveDeals: { type: "boolean" },
+              minRevenue: { type: "boolean" },
+            },
+            additionalProperties: false,
+          },
+          limit: { type: "integer", minimum: 0 },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_proposals",
+      description:
+        "List the workspace's proposals, optionally filtered by canonical status (all default, draft, sent, viewed, accepted, rejected), newest update first, bounded limit (max 20).",
+      parameters: {
+        type: "object",
+        properties: {
+          status: {
+            type: "string",
+            enum: ["all", "draft", "sent", "viewed", "accepted", "rejected"],
+          },
+          limit: { type: "integer", minimum: 0 },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_followups",
+      description:
+        "List the workspace's follow-ups in one bucket (all default, overdue, today, upcoming, done), ordered by due date, bounded limit (max 20).",
+      parameters: intSchema,
+    },
+  },
+];
+/** Bucket enum for get_followups, kept in lockstep with the schema above. */
+COPILOT_TOOLS[4].function.parameters.properties = {
+  bucket: {
+    type: "string",
+    enum: ["overdue", "today", "upcoming", "done", "all"],
+  },
+  limit: { type: "integer", minimum: 0 },
+};
+
+/**
+ * The parse-time name filter — derived from the same COPILOT_TOOLS constant
+ * (single source of truth, NOT a second hand-written switch). Unknown tool
+ * names are rejected before any execution; runCopilotTool's fixed switch
+ * remains the enforcement boundary underneath this.
+ */
+const COPILOT_TOOL_NAMES: ReadonlySet<string> = new Set(
+  COPILOT_TOOLS.map((t) => t.function.name),
+);
+
+/**
+ * Normalize ONE model tool call into { name, args } — pure, no execution,
+ * no network. Strict: the name must be a non-empty string, `arguments` must
+ * be a JSON string that parses to a plain object (arrays and null are
+ * rejected). Malformed input returns a deterministic error instead of being
+ * silently repaired. The raw name is echoed in errors ONLY for
+ * classification/logging — never executed against.
+ */
+export type NormalizedToolCall = {
+  ok: true;
+  name: string;
+  args: Record<string, unknown>;
+};
+export type ToolParseError = {
+  ok: false;
+  code: "invalid_tool_call";
+  rawName?: string;
+};
+
+export function parseNormalizedToolCall(
+  raw: unknown,
+): NormalizedToolCall | ToolParseError {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return { ok: false, code: "invalid_tool_call" };
+  }
+  const r = raw as Record<string, unknown>;
+  const fn = r.function;
+  if (typeof fn !== "object" || fn === null || Array.isArray(fn)) {
+    return { ok: false, code: "invalid_tool_call" };
+  }
+  const rawName = (fn as Record<string, unknown>).name;
+  if (typeof rawName !== "string" || rawName.length === 0 || rawName.length > 200) {
+    return { ok: false, code: "invalid_tool_call", rawName: typeof rawName === "string" ? rawName : undefined };
+  }
+  // T11: unknown tool names are rejected HERE, before any execution —
+  // the raw name is preserved only for deterministic classification.
+  if (!COPILOT_TOOL_NAMES.has(rawName)) {
+    return { ok: false, code: "invalid_tool_call", rawName };
+  }
+  const rawArgs = (fn as Record<string, unknown>).arguments;
+  if (typeof rawArgs !== "string") {
+    return { ok: false, code: "invalid_tool_call", rawName };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawArgs);
+  } catch {
+    return { ok: false, code: "invalid_tool_call", rawName };
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { ok: false, code: "invalid_tool_call", rawName };
+  }
+  return { ok: true, name: rawName, args: parsed as Record<string, unknown> };
+}
+
+/**
+ * Enforce the ONE-tool-call limit over a response's tool_calls array —
+ * pure, no execution. Zero calls ⇒ no tool call (normal text path); exactly
+ * one ⇒ normalized; more than one ⇒ deterministic too_many_tool_calls
+ * (no tool is chosen, none is executed). The continuation request (2c-4B)
+ * will also send parallel_tool_calls: false.
+ */
+export type SingleToolCallOutcome =
+  | { kind: "none" }
+  | { kind: "single"; call: NormalizedToolCall }
+  | { kind: "too_many" };
+
+export function detectSingleToolCall(toolCalls: unknown): SingleToolCallOutcome {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) return { kind: "none" };
+  if (toolCalls.length > 1) return { kind: "too_many" };
+  const parsed = parseNormalizedToolCall(toolCalls[0]);
+  return parsed.ok ? { kind: "single", call: parsed } : { kind: "none" };
+}
+
+/**
+ * Human-honest marker text for an un-executed tool call — derived ONLY from
+ * the deterministic classification, never from tool results (nothing ran).
+ * No raw JSON or argument values are ever included.
+ */
+function toolCallNotice(kind: "invalid" | "too_many"): string {
+  return kind === "too_many"
+    ? "I identified the data I'd need, but multiple lookups in one turn aren't supported yet — please ask for one thing at a time."
+    : "I identified a data lookup but couldn't complete it safely this turn. Could you rephrase that?";
+}
+
+/**
+ * Classify ONE turn's tool-call outcome (2c-4A contract):
+ *  - zero/one tool call that parses → persist nothing (2c-4B will execute +
+ *    continue here — today this turn simply produces no tool output yet);
+ *  - unparseable single call or >1 calls → persist the honest
+ *    non-technical marker so the user sees why nothing happened.
+ * No tool is executed and no second model request is made.
+ */
+export async function classifyToolCallOutcome(
+  rawToolCalls: unknown[],
+  persistNote: (note: string) => Promise<void>,
+): Promise<void> {
+  const outcome = detectSingleToolCall(rawToolCalls);
+  if (outcome.kind === "single" && outcome.call.ok) return;
+  await persistNote(toolCallNotice(outcome.kind === "too_many" ? "too_many" : "invalid"));
+}
+
+/**
+ * Shared non-content turn writer (2c-4A): identical persistence path for
+ * every non-text assistant turn — one row, insert-once, ownership checked.
+ * Today used only for the un-executable-tool-call marker; Phase 2c-4B will
+ * reuse it to persist the assistant turn that follows a tool result.
+ */
+export async function persistNonContentAssistantTurn(
+  ctx: Pick<ActionCtx, "runMutation">,
+  conversationId: Id<"conversations">,
+  userId: Id<"users">,
+  note: string,
+): Promise<void> {
+  await ctx.runMutation(internal.assistant.persistToolCallMarker, {
+    conversationId,
+    userId,
+    note,
+  });
+}
+
 export async function runCopilotTool(
   ctx: Pick<ActionCtx, "runQuery">,
   userId: Id<"users">,
@@ -930,6 +1187,14 @@ export const copilotReply = action({
         body: JSON.stringify({
           model: "gpt-4o-mini",
           stream: true,
+          // 2c-4A: the model can REQUEST one read-only tool per turn. The
+          // schemas are model guidance only — the server-side parser and the
+          // fixed dispatcher remain the actual validation/authorization
+          // boundary, and no tool is executed inside this action (2c-4B will
+          // add the continuation request).
+          tools: COPILOT_TOOLS,
+          tool_choice: "auto",
+          parallel_tool_calls: false,
           messages: [
             { role: "system", content: COPILOT_SYSTEM },
             {
@@ -961,6 +1226,10 @@ export const copilotReply = action({
       let messageId: string | null = null;
       let lastWrite = 0;
       let interrupted = false;
+      // 2c-4A: raw tool-call chunks + finish signal. No tool is executed
+      // here — the outcome is classified after the stream completes.
+      const rawToolCalls: unknown[] = [];
+      let sawToolCallFinish = false;
       const THROTTLE_MS = 333;
 
       const flush = async (force: boolean) => {
@@ -989,7 +1258,10 @@ export const copilotReply = action({
             if (payload === "[DONE]") continue;
             try {
               const evt = JSON.parse(payload) as {
-                choices?: { delta?: { content?: string } }[];
+                choices?: {
+                  delta?: { content?: string; tool_calls?: unknown };
+                  finish_reason?: string;
+                }[];
               };
               const delta = evt.choices?.[0]?.delta?.content;
               if (typeof delta === "string" && delta.length > 0) {
@@ -1007,6 +1279,21 @@ export const copilotReply = action({
                   await flush(false);
                 }
               }
+              // Tool-call deltas carry no displayable content. Accumulate
+              // their raw chunks and act once, at the finish_reason — after
+              // the stream is fully consumed, so the decision sees the
+              // complete array (partial/duplicate chunk events never
+              // double-fire).
+              const tcDelta = evt.choices?.[0]?.delta?.tool_calls;
+              if (tcDelta !== undefined && tcDelta !== null) {
+                if (Array.isArray(tcDelta)) {
+                  rawToolCalls.push(...tcDelta);
+                } else {
+                  rawToolCalls.push(tcDelta);
+                }
+              }
+              const finish = evt.choices?.[0]?.finish_reason;
+              if (finish === "tool_calls") sawToolCallFinish = true;
             } catch {
               // Malformed SSE line — skip it, never fabricate content.
             }
@@ -1021,7 +1308,26 @@ export const copilotReply = action({
       // Nothing was ever persisted (first-chunk insert failed or the
       // conversation vanished mid-stream): do NOT claim success — the client
       // falls back to the deterministic engine.
-      if (messageId === null) return null;
+      if (messageId === null) {
+        // No row exists, so persisting the marker here cannot duplicate
+        // anything. A failed marker write returns null → the existing
+        // deterministic fallback persists one honest answer.
+        if (sawToolCallFinish) {
+          try {
+            await classifyToolCallOutcome(rawToolCalls, async (note) => {
+              await ctx.runMutation(internal.assistant.persistToolCallMarker, {
+                conversationId,
+                userId,
+                note,
+              });
+            });
+          } catch {
+            /* fall through to null */
+          }
+          return "ok";
+        }
+        return null;
+      }
 
       // Final authoritative write: the persisted message becomes exactly the
       // accumulated text. One row, one final content — no duplicates.
@@ -1035,6 +1341,28 @@ export const copilotReply = action({
         // Last throttled write already reached the database; report honestly
         // as partial rather than triggering the fallback path.
       }
+
+      // 2c-4A: a tool-call turn is terminated through the deterministic
+      // internal marker path (no second model request, no fake answer, no
+      // raw JSON shown). If the model emitted content AND a tool call, the
+      // content is already persisted above and stays — the marker adds the
+      // honest note beside it. A failed marker write still reports "ok":
+      // the persisted text row exists and is authoritative; a null here
+      // would duplicate it with a fallback answer.
+      if (sawToolCallFinish) {
+        try {
+          await classifyToolCallOutcome(rawToolCalls, async (note) => {
+            await ctx.runMutation(internal.assistant.persistToolCallMarker, {
+              conversationId,
+              userId,
+              note,
+            });
+          });
+        } catch {
+          /* keep "ok" — see comment above */
+        }
+      }
+
       // "partial" tells the UI the reply may be incomplete so it can say so
       // honestly instead of pretending the response finished.
       return interrupted ? "partial" : "ok";

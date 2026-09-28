@@ -209,7 +209,8 @@ export const getOwnedConversation = internalQuery({
 
 /**
  * The most recent `limit` messages of an owned conversation, oldest first.
- * Hard-capped so the AI context can never grow unbounded.
+ * Hard-capped so the AI context can never grow unbounded. Non-text tool-call
+ * marker turns participate in the same bounded window as every other row.
  */
 export const recentMessages = internalQuery({
   args: {
@@ -238,6 +239,31 @@ export const appendAssistantMessage = internalMutation({
   },
   handler: async (ctx, { conversationId, userId, content }) =>
     insertTurn(ctx, { conversationId, userId, role: "assistant", content }),
+});
+
+/**
+ * 2c-4A: persist ONE non-content assistant turn (e.g. the honest note shown
+ * when the model requested a tool that this action deliberately does not
+ * execute yet). Insert-once inside the conversation; the caller MUST pass a
+ * session-derived userId — never a model-supplied one.
+ */
+export const persistToolCallMarker = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+    userId: v.id("users"),
+    note: v.string(),
+  },
+  handler: async (
+    ctx,
+    { conversationId, userId, note },
+  ): Promise<Id<"conversationMessages">> => {
+    return insertTurn(ctx, {
+      conversationId,
+      userId,
+      role: "assistant",
+      content: note.slice(0, 300),
+    });
+  },
 });
 
 /**

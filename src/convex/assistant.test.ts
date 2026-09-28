@@ -34,6 +34,12 @@ import {
   GET_FOLLOWUPS_DEFAULT_LIMIT,
   GET_FOLLOWUPS_MAX_LIMIT,
 } from "./assistant";
+import {
+  classifyToolCallOutcome,
+  detectSingleToolCall,
+  parseNormalizedToolCall,
+  COPILOT_TOOLS,
+} from "./ai";
 import { computeClients, filterClients, sortClients } from "../lib/clients";
 import { dealTitle } from "../lib/revenue";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -984,5 +990,162 @@ describe("get_followups: ordering, limits, projection", () => {
     expect((toolBody.match(/withIndex\("by_user/g) ?? []).length).toBe(2);
     expect((toolBody.match(/q\.eq\("userId", userId\)/g) ?? []).length).toBe(2);
     expect(toolBody).toContain("l.name");
+  });
+});
+
+// ── Phase 2c-4A: native tool schema + strict tool-call parsing ─────────────
+
+function makeOpenAIToolCall(name: string, argsJson: string) {
+  return { id: "call_1", type: "function", function: { name, arguments: argsJson } };
+}
+
+describe("2c-4A: COPILOT_TOOLS schema contract", () => {
+  test("exposes exactly the five whitelisted read-only tools", () => {
+    expect(COPILOT_TOOLS.map((t) => t.function.name).sort()).toEqual([
+      "get_client",
+      "get_clients",
+      "get_deal",
+      "get_followups",
+      "get_proposals",
+    ]);
+    expect(COPILOT_TOOLS.every((t) => t.type === "function")).toBe(true);
+  });
+  test("single-arg tools require exactly one field with additionalProperties false", () => {
+    const deal = COPILOT_TOOLS.find((t) => t.function.name === "get_deal")!;
+    expect(deal.function.parameters.required).toEqual(["dealId"]);
+    expect(deal.function.parameters.additionalProperties).toBe(false);
+    const client = COPILOT_TOOLS.find((t) => t.function.name === "get_client")!;
+    expect(client.function.parameters.required).toEqual(["clientKey"]);
+    expect(client.function.parameters.additionalProperties).toBe(false);
+  });
+  test("list tools use closed enums and closed filter objects", () => {
+    const clients = COPILOT_TOOLS.find((t) => t.function.name === "get_clients")!.function.parameters;
+    expect((clients.properties!.sort as { enum: string[] }).enum).toEqual(["revenue", "activity", "name"]);
+    expect((clients.properties!.filter as { additionalProperties: boolean }).additionalProperties).toBe(false);
+    expect((clients.properties!.filter as { properties: Record<string, unknown> }).properties.hasActiveDeals).toBeDefined();
+    expect((clients.properties!.filter as { properties: Record<string, unknown> }).properties.minRevenue).toBeDefined();
+    const proposals = COPILOT_TOOLS.find((t) => t.function.name === "get_proposals")!.function.parameters;
+    expect((proposals.properties!.status as { enum: string[] }).enum).toEqual([
+      "all", "draft", "sent", "viewed", "accepted", "rejected",
+    ]);
+    const followups = COPILOT_TOOLS.find((t) => t.function.name === "get_followups")!.function.parameters;
+    expect((followups.properties!.bucket as { enum: string[] }).enum).toEqual([
+      "overdue", "today", "upcoming", "done", "all",
+    ]);
+  });
+});
+
+describe("2c-4A: parseNormalizedToolCall (strict, no repair)", () => {
+  test("T1–T5 each valid whitelisted tool call parses", () => {
+    expect(parseNormalizedToolCall(makeOpenAIToolCall("get_deal", JSON.stringify({ dealId: VALID_ID })))).toEqual({
+      ok: true, name: "get_deal", args: { dealId: VALID_ID },
+    });
+    expect(parseNormalizedToolCall(makeOpenAIToolCall("get_client", JSON.stringify({ clientKey: "acme-corp" })))).toEqual({
+      ok: true, name: "get_client", args: { clientKey: "acme-corp" },
+    });
+    expect(parseNormalizedToolCall(makeOpenAIToolCall("get_clients", JSON.stringify({ sort: "revenue", limit: 10 })))).toEqual({
+      ok: true, name: "get_clients", args: { sort: "revenue", limit: 10 },
+    });
+    expect(parseNormalizedToolCall(makeOpenAIToolCall("get_proposals", JSON.stringify({ status: "sent" })))).toEqual({
+      ok: true, name: "get_proposals", args: { status: "sent" },
+    });
+    expect(parseNormalizedToolCall(makeOpenAIToolCall("get_followups", JSON.stringify({ bucket: "overdue" })))).toEqual({
+      ok: true, name: "get_followups", args: { bucket: "overdue" },
+    });
+  });
+  test("T6 malformed JSON arguments are rejected (not repaired)", () => {
+    const r = parseNormalizedToolCall(makeOpenAIToolCall("get_deal", '{"dealId": '));
+    expect(r.ok).toBe(false);
+  });
+  test("T7 array arguments are rejected", () => {
+    expect(parseNormalizedToolCall(makeOpenAIToolCall("get_clients", "[{ limit: 5 }]")).ok).toBe(false);
+    expect(parseNormalizedToolCall(makeOpenAIToolCall("get_clients", "[]")).ok).toBe(false);
+  });
+  test("T8 null arguments are rejected", () => {
+    expect(parseNormalizedToolCall(makeOpenAIToolCall("get_deal", "null")).ok).toBe(false);
+  });
+  test("T9 non-string arguments field is rejected", () => {
+    expect(parseNormalizedToolCall({ function: { name: "get_deal", arguments: { dealId: "x" } } }).ok).toBe(false);
+    expect(parseNormalizedToolCall({ function: { name: "get_deal" } }).ok).toBe(false);
+  });
+  test("T10 missing/empty/non-string tool name is rejected", () => {
+    expect(parseNormalizedToolCall({ function: { arguments: "{}" } }).ok).toBe(false);
+    expect(parseNormalizedToolCall({ function: { name: "", arguments: "{}" } }).ok).toBe(false);
+    expect(parseNormalizedToolCall({ function: { name: 42, arguments: "{}" } }).ok).toBe(false);
+    expect(parseNormalizedToolCall("get_deal").ok).toBe(false);
+    expect(parseNormalizedToolCall(null).ok).toBe(false);
+  });
+  test("T11 unknown tool name is preserved in the deterministic error only", () => {
+    const r = parseNormalizedToolCall(makeOpenAIToolCall("drop_all_tables", "{}"));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.rawName).toBe("drop_all_tables");
+  });
+  test("non-object input is rejected", () => {
+    for (const bad of [5, "x", true]) expect(parseNormalizedToolCall(bad).ok).toBe(false);
+  });
+});
+
+describe("2c-4A: detectSingleToolCall (ONE tool call per turn)", () => {
+  test("T12 zero tool calls → none (normal text path)", () => {
+    expect(detectSingleToolCall(undefined)).toEqual({ kind: "none" });
+    expect(detectSingleToolCall(null)).toEqual({ kind: "none" });
+    expect(detectSingleToolCall([])).toEqual({ kind: "none" });
+  });
+  test("T13 exactly one valid tool call → single", () => {
+    const out = detectSingleToolCall([makeOpenAIToolCall("get_deal", JSON.stringify({ dealId: VALID_ID }))]);
+    expect(out.kind).toBe("single");
+    if (out.kind === "single") expect(out.call.name).toBe("get_deal");
+  });
+  test("T14 two tool calls → deterministic too_many (none chosen, none run)", () => {
+    const two = [
+      makeOpenAIToolCall("get_deal", "{}"),
+      makeOpenAIToolCall("get_clients", "{}"),
+    ];
+    const out = detectSingleToolCall(two);
+    expect(out).toEqual({ kind: "too_many" });
+    expect(detectSingleToolCall([1, 2, 3]).kind).toBe("too_many");
+  });
+  test("one unparseable call degrades to none (no execution, no error path)", () => {
+    expect(detectSingleToolCall([makeOpenAIToolCall("get_deal", "{broken")]).kind).toBe("none");
+  });
+});
+
+describe("2c-4A: dispatcher/argument validation remains authoritative", () => {
+  test("T15 server parsers still reject model-provided userId on list tools", () => {
+    expect(parseGetClientsArgs({ userId: "u" }).ok).toBe(false);
+    expect(parseGetProposalsArgs({ userId: "u" }).ok).toBe(false);
+    expect(parseGetFollowupsArgs({ userId: "u" }).ok).toBe(false);
+  });
+  test("T15 model args that bypass schema limits still hit server clamps/errors", () => {
+    // Schema says integer ≥ 0; the server parser is authoritative and the
+    // pipeline clamps anything above 20 — schema is convenience, not trust.
+    const r = parseGetClientsArgs({ limit: 10 ** 12 });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const capped = runGetClientsPipeline(r.args, []);
+      expect(capped.length).toBe(0);
+      expect(CLIENTS_LIST_MAX_LIMIT).toBe(20);
+    }
+  });
+  test("T16 classifyToolCallOutcome persists an honest note only for un-runnable calls", async () => {
+    const notes: string[] = [];
+    // Single valid call → 2c-4B territory: nothing persisted today.
+    await classifyToolCallOutcome([makeOpenAIToolCall("get_deal", "{}")], async (n) => { notes.push(n); });
+    expect(notes.length).toBe(0);
+    // Too many / invalid → one honest marker note, no raw JSON, no args.
+    await classifyToolCallOutcome(["a", "b"], async (n) => { notes.push(n); });
+    await classifyToolCallOutcome([makeOpenAIToolCall("get_deal", "{broken")], async (n) => { notes.push(n); });
+    expect(notes.length).toBe(2);
+    for (const n of notes) {
+      expect(n.includes("dealId")).toBe(false);
+      expect(n.includes("{")).toBe(false);
+      expect(typeof n).toBe("string");
+    }
+  });
+  test("tool-call handling never executes anything: copilotReply wires detection only", () => {
+    const source = require("fs").readFileSync("src/convex/ai.ts", "utf8");
+    expect((source.match(/runCopilotTool\(/g) ?? []).length).toBe(1); // its definition site
+    expect((source.match(/classifyToolCallOutcome\(/g) ?? []).length).toBe(3); // def + 2 call sites
+    expect(source).not.toContain("tool_result");
   });
 });
