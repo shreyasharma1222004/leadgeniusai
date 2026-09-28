@@ -988,9 +988,16 @@ function DealCard({
   const save = async () => {
     setSaving(true);
     try {
+      // 0 is a real persisted value (zero-value deal, 0% probability) — only
+      // empty input means unset. Same rule as the Pipeline editor.
+      const num = (s: string) => {
+        if (!s.trim()) return undefined;
+        const n = Number(s.replace(/[^0-9.]/g, ""));
+        return Number.isFinite(n) ? n : undefined;
+      };
       await onSave({
-        dealValue: value.trim() ? Number(value.replace(/[^0-9.]/g, "")) || undefined : undefined,
-        probability: probability.trim() ? Number(probability.replace(/[^0-9.]/g, "")) || undefined : undefined,
+        dealValue: num(value),
+        probability: num(probability),
         expectedCloseAt: closeDate ? new Date(closeDate).getTime() : undefined,
       });
     } finally {

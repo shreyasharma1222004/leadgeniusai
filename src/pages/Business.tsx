@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { api } from "@/convex/_generated/api";
-import { money } from "@/lib/growth";
+import { currencySymbol, money } from "@/lib/growth";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -105,8 +105,12 @@ export default function BusinessPage() {
   const [confirmDelete, setConfirmDelete] = useState<Id<"businessGoals"> | null>(null);
 
   const save = async (form: ProfileFormValues) => {
-    const num = (s: string) =>
-      s.trim() ? Number(s.replace(/[^0-9.]/g, "")) || undefined : undefined;
+    // 0 is a real persisted value — only empty input means unset.
+    const num = (s: string) => {
+      if (!s.trim()) return undefined;
+      const n = Number(s.replace(/[^0-9.]/g, ""));
+      return Number.isFinite(n) ? n : undefined;
+    };
     await saveProfile({
       businessName: form.businessName.trim(),
       website: form.website.trim() || undefined,
@@ -247,6 +251,7 @@ export default function BusinessPage() {
 
       <GoalDialog
         state={goalDialog}
+        currency={profile?.currency}
         onClose={() => setGoalDialog(null)}
         onCreate={async (fields) => {
           try {
@@ -402,7 +407,7 @@ function ProfileForm({
     products: initial?.products ?? "",
     description: initial?.description ?? "",
     targetGeography: initial?.targetGeography ?? "",
-    currency: initial?.currency ?? "USD",
+    currency: initial?.currency ?? "",
     teamSize: initial?.teamSize ?? "",
     currentMonthlyRevenue: initial?.currentMonthlyRevenue?.toString() ?? "",
     targetMonthlyRevenue: initial?.targetMonthlyRevenue?.toString() ?? "",
@@ -764,10 +769,12 @@ function goalUnitLabel(
 
 function GoalDialog({
   state,
+  currency,
   onClose,
   onCreate,
   onUpdate,
 }: {
+  currency?: string;
   state:
     | { mode: "create" }
     | {
@@ -804,6 +811,7 @@ function GoalDialog({
         <GoalDialogInner
           key={editing?._id ?? "create"}
           editing={editing}
+          currency={currency}
           onClose={onClose}
           onCreate={onCreate}
           onUpdate={onUpdate}
@@ -815,10 +823,12 @@ function GoalDialog({
 
 function GoalDialogInner({
   editing,
+  currency,
   onClose,
   onCreate,
   onUpdate,
 }: {
+  currency?: string;
   editing: {
     _id: Id<"businessGoals">;
     name: string;
@@ -858,9 +868,12 @@ function GoalDialogInner({
     }
     setBusy(true);
     try {
-      const parsedTarget = target.trim()
-        ? Number(target.replace(/[^0-9.]/g, "")) || undefined
-        : undefined;
+      // 0 is a real target (e.g. a floor/reset) — only empty input means unset.
+      const parsedTarget = (() => {
+        if (!target.trim()) return undefined;
+        const n = Number(target.replace(/[^0-9.]/g, ""));
+        return Number.isFinite(n) ? n : undefined;
+      })();
       const parsedDeadline = deadline ? new Date(deadline).getTime() : undefined;
       if (editing) {
         await onUpdate(editing._id, {
@@ -936,7 +949,7 @@ function GoalDialogInner({
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label htmlFor="goal-target">
-              Target {goalUnit(kind) === "money" ? "($)" : goalUnit(kind) === "percent" ? "(%)" : ""}
+              Target {goalUnit(kind) === "money" ? `(${currencySymbol(currency)}, required for money goals)` : goalUnit(kind) === "percent" ? "(%)" : ""}
             </Label>
             <Input
               id="goal-target"
