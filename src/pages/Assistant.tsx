@@ -11,7 +11,7 @@ import {
 import { computeClients } from "@/lib/clients";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { ArrowRight, Bot, MessageSquarePlus, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -69,11 +69,15 @@ export default function AssistantPage() {
   const addMessageMutation = useMutation(api.assistant.addMessage);
   const renameConversationMutation = useMutation(api.assistant.renameConversation);
   const deleteConversationMutation = useMutation(api.assistant.deleteConversation);
+  // Server-side AI reply path (Step 2b-1). Explicit submission only — never
+  // called on load, switching, or typing. Null return ⇒ deterministic fallback.
+  const copilotReplyAction = useAction(api.ai.copilotReply);
 
   const [activeId, setActiveId] = useState<Id<"conversations"> | null>(null);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
 
   // Auto-select the most recent conversation once the list loads (§4).
   useEffect(() => {
@@ -185,50 +189,77 @@ export default function AssistantPage() {
 
   const ask = async (question: string) => {
     const trimmed = question.trim();
-    if (!trimmed || !ready) return;
+    if (!trimmed || !ready || thinking) return;
     setThinking(true);
     setSendError(null);
+    setFallbackNotice(null);
+
+    // 1+2. Ensure a conversation exists and persist the user message FIRST.
+    // A failure here must not fake an assistant answer.
+    let convId: Id<"conversations">;
     try {
-      // 1. Ensure an active conversation exists.
-      let convId = activeId;
-      if (!convId) {
+      if (activeId) {
+        convId = activeId;
+      } else {
         convId = await createConversation({});
         setActiveId(convId);
       }
-      // 2. Persist the user message FIRST (a failure here must not fake an
-      //    assistant answer — the error state shows and nothing is saved).
       await addMessageMutation({ conversationId: convId, role: "user", content: trimmed });
-      // 3. First message also titles the conversation (deterministic, local).
+    } catch {
+      setSendError(
+        "Your message couldn't be saved — it was NOT added to this conversation. Try sending again.",
+      );
+      setThinking(false);
+      return;
+    }
+
+    try {
+      // First message also titles the conversation (deterministic, local).
       const conv = (conversations ?? []).find((c) => c._id === convId);
       if (conv && conv.title === DEFAULT_TITLE) {
         await renameConversationMutation({ id: convId, title: deriveTitle(trimmed) });
       }
-      // 4. Deterministic answer — ZERO AI calls (§7). The engine receives the
-      //    bounded recent history for follow-up resolution.
-      const priorTurns: AssistantHistoryTurn[] = [
-        ...history,
-        { role: "user" as const, text: trimmed },
-      ];
-      const answer = askAssistant(
-        trimmed,
-        leads,
-        messages,
-        followUps,
-        campaigns,
-        context,
-        priorTurns,
-      );
-      // 5. Persist the assistant answer, then the reactive subscription
-      //    renders both turns from the server (no optimistic duplicates).
-      await addMessageMutation({
-        conversationId: convId,
-        role: "assistant",
-        content: [answer.text, ...answer.bullets.map((b) => `• ${b}`)].join("\n"),
-      });
+
+      // 3. Real AI path — server-side, ownership-checked, one request per
+      //    submission. Null or a thrown error ⇒ deterministic fallback below.
+      let aiReplied: string | null = null;
+      try {
+        aiReplied = await copilotReplyAction({ conversationId: convId, message: trimmed });
+      } catch {
+        aiReplied = null;
+      }
+
+      if (aiReplied === null) {
+        // 4. Fallback: the existing deterministic engine (unchanged). It gets
+        //    the bounded recent history for follow-up resolution.
+        const priorTurns: AssistantHistoryTurn[] = [
+          ...history,
+          { role: "user" as const, text: trimmed },
+        ];
+        const answer = askAssistant(
+          trimmed,
+          leads,
+          messages,
+          followUps,
+          campaigns,
+          context,
+          priorTurns,
+        );
+        // 5. Persist the fallback answer through the same public mutation —
+        //    the reactive subscription renders it; no optimistic duplicates.
+        await addMessageMutation({
+          conversationId: convId,
+          role: "assistant",
+          content: [answer.text, ...answer.bullets.map((b) => `• ${b}`)].join("\n"),
+        });
+        setFallbackNotice(
+          "AI is unavailable right now — this answer came from the offline rule engine, computed from your real workspace data.",
+        );
+      }
       setInput("");
     } catch {
       setSendError(
-        "Your message couldn't be saved — it was NOT added to this conversation. Nothing was lost from your workspace; try sending again.",
+        "Your message was saved, but the reply couldn't be generated — try again in a moment.",
       );
     } finally {
       setThinking(false);
@@ -244,7 +275,9 @@ export default function AssistantPage() {
     <AppShell title="AI Copilot">
       <p className="-mt-3 mb-4 text-sm text-muted-foreground">
         Your business copilot — answers from your real workspace data, never invented numbers.
-        Conversations are saved to your workspace.
+        Conversations are saved to your workspace. AI replies are generated
+        server-side; if AI is unavailable, the offline rule engine answers from
+        your real data instead.
       </p>
 
       {!ready ? (
@@ -403,6 +436,11 @@ export default function AssistantPage() {
                 {sendError && (
                   <p className="mt-3 rounded-md border border-[#a8442f]/40 bg-[#a8442f]/[0.08] px-3 py-2 text-xs leading-relaxed text-[#a8442f]">
                     {sendError}
+                  </p>
+                )}
+                {fallbackNotice && !sendError && (
+                  <p className="mt-3 rounded-md border border-[#a06b3c]/35 bg-[#a06b3c]/[0.08] px-3 py-2 text-xs leading-relaxed text-[#82552e]">
+                    {fallbackNotice}
                   </p>
                 )}
 
