@@ -255,6 +255,12 @@ export default function AssistantPage() {
         setFallbackNotice(
           "AI is unavailable right now — this answer came from the offline rule engine, computed from your real workspace data.",
         );
+      } else if (aiReplied === "partial") {
+        // Streamed reply was interrupted mid-answer: what arrived was saved
+        // as-is (never fabricated into a fake completion).
+        setFallbackNotice(
+          "The AI reply was interrupted before finishing — the partial response above was saved as-is. Ask again to continue.",
+        );
       }
       setInput("");
     } catch {
@@ -451,8 +457,12 @@ export default function AssistantPage() {
                       <button
                         key={s}
                         type="button"
+                        disabled={thinking}
                         onClick={() => void ask(s)}
-                        className="cursor-pointer rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[#b3a894] hover:text-foreground"
+                        className={cn(
+                          "cursor-pointer rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[#b3a894] hover:text-foreground",
+                          thinking && "cursor-not-allowed opacity-50 hover:border-border",
+                        )}
                       >
                         {s}
                       </button>

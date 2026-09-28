@@ -235,6 +235,31 @@ export const appendAssistantMessage = internalMutation({
 });
 
 /**
+ * Streaming support (Phase 3 §2b-3A): update the content of ONE existing
+ * assistant message as the model's reply accumulates. The row is created
+ * once by appendAssistantMessage and patched in place — chunks never create
+ * rows, so exactly one persisted assistant message remains. Ownership is
+ * re-verified on every patch: the row must belong to the caller, be an
+ * assistant turn, and live in a conversation the caller owns.
+ */
+export const updateAssistantMessage = internalMutation({
+  args: {
+    messageId: v.id("conversationMessages"),
+    userId: v.id("users"),
+    content: v.string(),
+  },
+  handler: async (ctx, { messageId, userId, content }) => {
+    const row = await ctx.db.get(messageId);
+    if (!row || row.userId !== userId || row.role !== "assistant") {
+      throw new Error("Message not found.");
+    }
+    const conv = await ctx.db.get(row.conversationId);
+    if (!conv || conv.userId !== userId) throw new Error("Conversation not found.");
+    await ctx.db.patch(messageId, { content: content.slice(0, MAX_CONTENT) });
+  },
+});
+
+/**
  * Compact, VERIFIED workspace snapshot for the Copilot AI — derived entirely
  * server-side from the caller's own records using the exact Phase 2 metric
  * definitions (computePipelineStats / computeClosedStats / goalEngine /

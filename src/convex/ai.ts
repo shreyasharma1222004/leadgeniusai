@@ -646,12 +646,25 @@ function buildCopilotUserPrompt(d: {
 
 /**
  * Generate one Copilot assistant reply for the authenticated caller's own
- * conversation and persist it as an assistant turn. Returns the message id,
- * or null when no key is configured or the model call fails — the UI then
- * falls back to the deterministic engine. Exactly one AI request per call;
- * no retries, no streaming.
+ * conversation and persist it as an assistant turn. Returns "ok" when a
+ * reply was persisted, or null when no key is configured or the model call
+ * produced nothing — the UI then falls back to the deterministic engine.
+ *
+ * Streaming (Phase 3 §2b-3A): exactly ONE model request per submission. The
+ * reply is consumed as an OpenAI SSE stream and delivered progressively by
+ * Convex's documented workaround pattern — the assistant row is INSERTED
+ * once at the first content chunk, then the SAME row is PATCHED with the
+ * accumulated text (throttled to ~3 writes/sec). Chunks never create rows,
+ * so exactly one persisted assistant message remains and the existing
+ * listMessages subscription streams it to the UI with zero client changes.
+ * A partial stream that dies mid-way is finalized as-is (durable), never
+ * fabricated into a fake completion; no client-visible abort is offered in
+ * this step and no retry is attempted.
  */
 export const copilotReply = action({
+  // Returns "ok" (complete reply persisted), "partial" (interrupted stream —
+  // what arrived was persisted as-is), or null (nothing usable — caller
+  // should use the deterministic fallback).
   args: {
     conversationId: v.id("conversations"),
     message: v.string(),
@@ -711,6 +724,7 @@ export const copilotReply = action({
         },
         body: JSON.stringify({
           model: "gpt-4o-mini",
+          stream: true,
           messages: [
             { role: "system", content: COPILOT_SYSTEM },
             {
@@ -730,23 +744,88 @@ export const copilotReply = action({
           max_tokens: 700,
         }),
       });
-      if (!res.ok) return null;
-      const data = (await res.json()) as {
-        choices?: { message?: { content?: string } }[];
-      };
-      const reply = (data?.choices?.[0]?.message?.content ?? "").trim();
-      if (!reply) return null;
+      if (!res.ok || !res.body) return null;
 
-      // Persist the assistant turn through the shared, ownership-checked
-      // writer so the existing UI subscription picks it up. No duplicates:
-      // the client renders from the server subscription, never optimistically.
-      await ctx.runMutation(internal.assistant.appendAssistantMessage, {
-        conversationId,
-        userId,
-        content: reply.slice(0, 8000),
-      });
-      return "ok";
+      // Consume the SSE stream: accumulate content deltas, persist once at
+      // first content, then patch the SAME row with throttled progress.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let full = "";
+      let messageId: string | null = null;
+      let lastWrite = 0;
+      let interrupted = false;
+      const THROTTLE_MS = 333;
+
+      const flush = async (force: boolean) => {
+        if (!messageId || full.length === 0) return;
+        const now = Date.now();
+        if (!force && now - lastWrite < THROTTLE_MS) return;
+        lastWrite = now;
+        await ctx.runMutation(internal.assistant.updateAssistantMessage, {
+          messageId: messageId as never,
+          userId,
+          content: full.slice(0, 8000),
+        });
+      };
+
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            const payload = trimmed.slice(5).trim();
+            if (payload === "[DONE]") continue;
+            try {
+              const evt = JSON.parse(payload) as {
+                choices?: { delta?: { content?: string } }[];
+              };
+              const delta = evt.choices?.[0]?.delta?.content;
+              if (typeof delta === "string" && delta.length > 0) {
+                full += delta;
+                if (messageId === null) {
+                  // First content: create the ONE assistant row (ownership
+                  // checked inside the internal mutation).
+                  const inserted = await ctx.runMutation(
+                    internal.assistant.appendAssistantMessage,
+                    { conversationId, userId, content: full.slice(0, 8000) },
+                  );
+                  messageId = String(inserted);
+                  lastWrite = Date.now();
+                } else {
+                  await flush(false);
+                }
+              }
+            } catch {
+              // Malformed SSE line — skip it, never fabricate content.
+            }
+          }
+        }
+      } catch {
+        // Network stream died mid-way: fall through and finalize whatever
+        // text actually arrived — never invent the missing remainder.
+        interrupted = true;
+      }
+
+      // Nothing was ever persisted (first-chunk insert failed or the
+      // conversation vanished mid-stream): do NOT claim success — the client
+      // falls back to the deterministic engine.
+      if (messageId === null) return null;
+
+      // Final authoritative write: the persisted message becomes exactly the
+      // accumulated text. One row, one final content — no duplicates.
+      await flush(true);
+      // "partial" tells the UI the reply may be incomplete so it can say so
+      // honestly instead of pretending the response finished.
+      return interrupted ? "partial" : "ok";
     } catch {
+      // Request setup/response-header failure: nothing was persisted, so the
+      // client falls back to the deterministic engine (Step 2b-1 behavior).
       return null;
     }
   },
