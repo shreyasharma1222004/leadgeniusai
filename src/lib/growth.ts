@@ -24,8 +24,9 @@ import {
  *                         (contacted, discovery, proposal, interested, won)
  *   activeOpportunities   COUNT of open leads in a value stage
  *                         (discovery, proposal, interested)
- *   pipelineValue         MONEY: sum of dealValue on active opportunities
- *                         (raw, unweighted)
+ *   pipelineValue         MONEY: sum of dealValue over ALL open deals (any
+ *                         canonical stage except won/lost) — matches
+ *                         computePipelineStats in revenue.ts (raw, unweighted)
  *   weightedPipeline      MONEY ESTIMATE: Σ dealValue × probability ÷ 100
  *                         over active opportunities — a FORECAST, explicitly
  *                         an estimate based on the pipeline data available,
@@ -231,6 +232,7 @@ export interface BriefLine {
 export function computeGrowthBrief(
   metrics: GrowthMetrics,
   leads: Lead[],
+  currency?: string | null,
 ): { headline: BriefLine[]; enoughData: boolean } {
   const lines: BriefLine[] = [];
 
@@ -267,7 +269,7 @@ export function computeGrowthBrief(
   if (top) {
     const label =
       top.dealValue !== undefined
-        ? `${top.name}${top.company ? ` (${top.company})` : ""} — ${money(top.dealValue)}`
+        ? `${top.name}${top.company ? ` (${top.company})` : ""} — ${money(top.dealValue, currency)}`
         : `${top.name}${top.company ? ` (${top.company})` : ""}`;
     lines.push({
       text: `Highest-value opportunity: ${label}`,
@@ -422,6 +424,7 @@ export function computeTodayPlan(
   metrics: GrowthMetrics,
   leads: Lead[],
   followUps: FollowUp[],
+  currency?: string | null,
 ): PlanAction[] {
   const actions: PlanAction[] = [];
   const now = Date.now();
@@ -433,7 +436,7 @@ export function computeTodayPlan(
   for (const f of followUps.filter((f) => f.status === "pending" && f.dueAt < now).slice(0, 2)) {
     const lead = leads.find((l) => l._id === f.leadId);
     const leadWhy = [
-      lead?.dealValue !== undefined ? money(lead.dealValue) : null,
+      lead?.dealValue !== undefined ? money(lead.dealValue, currency) : null,
       (lead?.score ?? 0) >= 70 ? `score ${lead?.score}` : null,
       lead ? statusLabelOf(canonicalStatus(lead.status)) : null,
     ]
@@ -596,6 +599,8 @@ export interface FunnelStage {
 
 export interface Analytics {
   total: number;
+  /** Leads counted as contacted by the contactRate formula above. */
+  contactedCount: number;
   funnel: FunnelStage[];
   contactRate: number;
   replyRate: number;
@@ -654,6 +659,7 @@ export function computeAnalytics(
 
   return {
     total,
+    contactedCount: contacted,
     funnel,
     contactRate: total ? Math.round((contacted / total) * 100) : 0,
     replyRate: total ? Math.round((replied / total) * 100) : 0,

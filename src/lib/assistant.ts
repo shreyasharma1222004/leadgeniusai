@@ -56,6 +56,8 @@ export interface CopilotContext {
   clients?: Client[];
   /** Phase 2: persisted proposals. */
   proposals?: CopilotProposal[];
+  /** Workspace currency (business profile) so money renders like every page. */
+  workspaceCurrency?: string;
 }
 
 /**
@@ -89,7 +91,7 @@ export function askAssistant(
       };
     }
     const titleOf = (p: CopilotProposal) =>
-      `${p.title}${p.value !== undefined ? ` · ${money(p.value)}` : ""}`;
+      `${p.title}${p.value !== undefined ? ` · ${money(p.value, context?.workspaceCurrency)}` : ""}`;
     return {
       intent: "proposals",
       text:
@@ -131,7 +133,7 @@ export function askAssistant(
         text: "Your highest-revenue clients:",
         bullets: top.map(
           (c) =>
-            `${c.name} — ${money(c.totalRevenue)} recorded across ${c.wonDeals.length} won deal${c.wonDeals.length === 1 ? "" : "s"}`,
+            `${c.name} — ${money(c.totalRevenue, context?.workspaceCurrency)} recorded across ${c.wonDeals.length} won deal${c.wonDeals.length === 1 ? "" : "s"}`,
         ),
         leadIds: top.map((c) => c.primaryLead._id),
       };
@@ -168,8 +170,7 @@ export function askAssistant(
       bullets: clients
         .slice(0, 6)
         .map(
-          (c) =>
-            `${c.name} — ${money(c.totalRevenue)} won · ${c.activeDeals.length} active deal${c.activeDeals.length === 1 ? "" : "s"} · ${c.health.detail}`,
+          (c) =>              `${c.name} — ${money(c.totalRevenue, context?.workspaceCurrency)} won · ${c.activeDeals.length} active deal${c.activeDeals.length === 1 ? "" : "s"} · ${c.health.detail}`,
         ),
       leadIds: clients.slice(0, 6).map((c) => c.primaryLead._id),
     };
@@ -191,9 +192,9 @@ export function askAssistant(
       intent: "revenue",
       text: "Revenue picture (weighted numbers are estimates, not guarantees):",
       bullets: [
-        `Pipeline value: ${money(pipe.pipelineValue)} across ${pipe.openDeals} open deal${pipe.openDeals === 1 ? "" : "s"}`,
-        `Weighted pipeline: ${money(pipe.weightedPipeline)} — estimate based on current deal probabilities`,
-        `Actual won revenue: ${money(closed.wonRevenue)} across ${closed.wonCount} deal${closed.wonCount === 1 ? "" : "s"}`,
+        `Pipeline value: ${money(pipe.pipelineValue, context?.workspaceCurrency)} across ${pipe.openDeals} open deal${pipe.openDeals === 1 ? "" : "s"}`,
+        `Weighted pipeline: ${money(pipe.weightedPipeline, context?.workspaceCurrency)} — estimate based on current deal probabilities`,
+        `Actual won revenue: ${money(closed.wonRevenue, context?.workspaceCurrency)} across ${closed.wonCount} deal${closed.wonCount === 1 ? "" : "s"}`,
         closed.winRate !== null
           ? `Closed-deal win rate: ${closed.winRate}% (won ÷ (won + lost))`
           : "Win rate: not enough data yet — no closed deals",
@@ -236,7 +237,7 @@ export function askAssistant(
           : "No stalled deals — every open deal has activity within the last 14 days (or no activity has ever been recorded, which I flag as never-contacted, not stalled).",
       bullets: stalled.map(
         (l) =>
-          `${dealTitle(l)} — ${money(l.dealValue)} · last activity ${timeAgo(lastActivityOf(l))}`,
+          `${dealTitle(l)} — ${money(l.dealValue, context?.workspaceCurrency)} · last activity ${timeAgo(lastActivityOf(l))}`,
       ),
       leadIds: leadIds(stalled),
     };
@@ -410,7 +411,7 @@ export function askAssistant(
       text: "Your most valuable open opportunities:",
       bullets: valued.map(
         (l) =>
-          `${dealTitle(l)} — ${money(l.dealValue)} · ${LEAD_STATUS_LABELS[l.status as LeadStatus] ?? l.status}`,
+          `${dealTitle(l)} — ${money(l.dealValue, context?.workspaceCurrency)} · ${LEAD_STATUS_LABELS[l.status as LeadStatus] ?? l.status}`,
       ),
       leadIds: valued.map((l) => l._id),
     };
@@ -428,8 +429,8 @@ export function askAssistant(
           ? "No closed-won deals yet. When you move a lead to Won, the revenue shows up here."
           : valued.length === 0
             ? `${won.length} deal${won.length === 1 ? "" : "s"} won — add deal values in Pipeline to see revenue.`
-            : `${won.length} deal${won.length === 1 ? "" : "s"} won, ${money(total)} in recorded revenue:`,
-      bullets: valued.map((l) => `${dealTitle(l)} — ${money(l.dealValue)}`),
+            : `${won.length} deal${won.length === 1 ? "" : "s"} won, ${money(total, context?.workspaceCurrency)} in recorded revenue:`,
+      bullets: valued.map((l) => `${dealTitle(l)} — ${money(l.dealValue, context?.workspaceCurrency)}`),
       leadIds: valued.slice(0, 5).map((l) => l._id),
     };
   }

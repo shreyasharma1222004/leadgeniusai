@@ -127,11 +127,10 @@ export default function OverviewPage() {
     followUps as FollowUpRow[],
     campaigns,
   );
-  const brief = computeGrowthBrief(metrics, leads);
-  const opportunities = computeOpportunities(metrics, leads, followUps as FollowUpRow[]);
-  const plan = computeTodayPlan(metrics, leads, followUps as FollowUpRow[]);
-
   const workspaceCurrency = profile?.currency ?? undefined;
+  const brief = computeGrowthBrief(metrics, leads, workspaceCurrency);
+  const opportunities = computeOpportunities(metrics, leads, followUps as FollowUpRow[]);
+  const plan = computeTodayPlan(metrics, leads, followUps as FollowUpRow[], workspaceCurrency);
 
   // ── Phase 2: revenue snapshot (§21) — same revenue source of truth ──
   const closedStats = computeClosedStats(leads);
@@ -141,8 +140,8 @@ export default function OverviewPage() {
     (p) => p.status === "sent" || p.status === "viewed",
   ).length;
   const clients = useMemo(
-    () => computeClients(leads, profile?.products),
-    [leads, profile?.products],
+    () => computeClients(leads, profile?.products, { followUps, messages }),
+    [leads, profile?.products, followUps, messages],
   );
   const healthyClients = clients.filter((c) => c.health.state === "healthy").length;
 
@@ -476,7 +475,10 @@ export default function OverviewPage() {
           {/* ── KPI strip ──────────────────────────────────────────────────── */}
           <section className="mt-12 grid grid-cols-2 gap-x-8 gap-y-8 border-t border-border pt-8 sm:grid-cols-3 lg:grid-cols-6">
             {[
-              { label: "Pipeline value", value: money(metrics.pipelineValue, workspaceCurrency), hint: `${metrics.activeOpportunities} open · weighted ${money(metrics.weightedPipeline, workspaceCurrency)} (estimate)` },
+              // One pipeline definition everywhere (§27): the same
+              // computePipelineStats the snapshot card, Pipeline header and
+              // Analytics use — never the narrower in-pipeline subset.
+              { label: "Pipeline value", value: money(pipelineStats.pipelineValue, workspaceCurrency), hint: `${pipelineStats.openDeals} open · weighted ${money(pipelineStats.weightedPipeline, workspaceCurrency)} (estimate)` },
               { label: "Won revenue", value: money(metrics.wonRevenue, workspaceCurrency), hint: `actual closed · ${metrics.wonCount} deal${metrics.wonCount === 1 ? "" : "s"}`, tone: "olive" },
               { label: "Conversion", value: `${metrics.conversionRate}%`, hint: "leads → won" },
               { label: "Avg deal size", value: metrics.avgDealSize === null ? "—" : money(metrics.avgDealSize, workspaceCurrency), hint: "closed deals" },

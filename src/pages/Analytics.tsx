@@ -6,6 +6,7 @@ import { api } from "@/convex/_generated/api";
 // src/lib/analytics.ts was merged into src/lib/growth.ts, which the Dashboard
 // also uses — both pages now share identical metric definitions.
 import { computeAnalytics, money } from "@/lib/growth";
+import { periodStart } from "@/lib/goalEngine";
 import {
   computeClosedStats,
   computeForecast,
@@ -65,10 +66,10 @@ export default function AnalyticsPage() {
   const forecast = computeForecast(closed, pipeline);
   const stageLastAt = useMemo(() => stageLastAtMap(history), [history]);
   const aging = pipelineAging(leads);
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const thisMonth = wonRevenueInPeriod(leads, monthStart.getTime());
+  // "This month" must match the goal engine's documented month boundary
+  // (goalEngine.periodStart uses UTC calendar months) so Dashboard, Analytics
+  // and Goals never disagree about what "this month" contains.
+  const thisMonth = wonRevenueInPeriod(leads, periodStart("month"));
   // Campaign names for attribution breakdown — REAL relationships only (the
   // campaignId stamped on deals at send time); no fabricated attribution.
   const campaignNames = useMemo(
@@ -87,7 +88,7 @@ export default function AnalyticsPage() {
   };
 
   const metrics = [
-    { label: "Contact rate", value: `${a.contactRate}%`, hint: `${leads.filter((l) => l.lastContactedAt).length} of ${a.total} leads contacted` },
+    { label: "Contact rate", value: `${a.contactRate}%`, hint: `${a.contactedCount} of ${a.total} leads contacted (a touch or a Qualified+ stage)` },
     { label: "Reply rate", value: `${a.replyRate}%`, hint: `${a.repliesReceived} replies logged` },
     { label: "Meeting rate", value: `${a.meetingRate}%`, hint: "proposal or better · estimates" },
     { label: "Win rate", value: a.won + a.lost > 0 ? `${a.winRate}%` : "—", hint: `closed deals only · ${a.won} won · ${a.lost} lost` },

@@ -75,6 +75,7 @@ export default function AssistantPage() {
           targetGeography: profile?.targetGeography,
           primaryChallenge: profile?.primaryChallenge,
           growthGoal: growthGoalLabel,
+          workspaceCurrency: profile?.currency ?? undefined,
           goals: (goals ?? []).map((g) => ({
             name: g.name,
             period: g.period,
