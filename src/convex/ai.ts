@@ -1,9 +1,11 @@
 "use node";
 
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { action } from "./_generated/server";
+import { action, type ActionCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import type { ToolErr, ToolOk } from "./assistant";
 
 /**
  * Server-side lead analysis (OpenAI).
@@ -16,6 +18,37 @@ import { internal } from "./_generated/api";
  */
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+
+// ── Copilot tool dispatcher (Phase 2c-2) ───────────────────────────────────
+//
+// Fixed whitelist + switch — NO dynamic function lookup, NO reflection, NO
+// model-provided table/index/query names, NO arbitrary query expressions.
+// The model can only ever name a tool; this dispatcher decides what runs.
+// userId always comes from the authenticated session inside the calling
+// action — never from the tool call. Model tool-calling is NOT connected in
+// 2c-2: copilotReply does not call this yet; it exists as a tested internal
+// capability only.
+
+export type CopilotToolCall = { name: string; args: Record<string, unknown> };
+
+export async function runCopilotTool(
+  ctx: Pick<ActionCtx, "runQuery">,
+  userId: Id<"users">,
+  call: CopilotToolCall,
+): Promise<ToolOk<Record<string, unknown>> | ToolErr> {
+  switch (call.name) {
+    case "get_deal": {
+      const dealId = typeof call.args?.dealId === "string" ? call.args.dealId : "";
+      return await ctx.runQuery(internal.assistant.toolGetDeal, { userId, dealId });
+    }
+    default:
+      return {
+        ok: false,
+        tool: call.name,
+        error: { code: "unknown_tool", message: `Unknown tool: ${call.name}` },
+      };
+  }
+}
 
 const leadInput = {
   name: v.string(),

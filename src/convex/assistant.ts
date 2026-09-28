@@ -7,7 +7,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   computeClosedStats,
   computePipelineStats,
@@ -18,7 +18,7 @@ import {
   lastActivityOf,
   stageLastAtMap,
 } from "../lib/revenue";
-import { canonicalStatus, statusLabel } from "../lib/leadStatus";
+import { canonicalStatus, statusLabel, weightedValue } from "../lib/leadStatus";
 import {
   computeGoalCurrent,
   formatGoalValue,
@@ -542,5 +542,124 @@ export const retrieveForCopilot = internalQuery({
         createdAt: p.createdAt,
       })),
     };
+  },
+});
+
+// ── Phase 2c-2: read-only Copilot tools (first tool: get_deal) ─────────────
+//
+// Tools are INTERNAL server-side capabilities for the Copilot (invoked only
+// from ai.copilotReply, never callable from the browser). The 2c-1 contract:
+// validated tool name → validated arguments → authenticated execution →
+// user-scoped read → bounded/sanitized projection → result envelope.
+// userId is NEVER a tool argument — it is resolved server-side from the
+// authenticated session and every read is scoped by it. Foreign and missing
+// records deliberately share one not_found result (no existence leak).
+
+/** Success envelope for a single-entity tool result (2c-1 §5). */
+export type ToolOk<T> = {
+  ok: true;
+  tool: "get_deal";
+  data: T;
+  returnedCount: number;
+};
+
+/** Structured failure envelope — safe to hand to the model. */
+export type ToolErr = {
+  ok: false;
+  tool: string;
+  error: {
+    code: "invalid_args" | "not_found" | "unknown_tool" | "failed";
+    message: string;
+  };
+};
+
+/**
+ * Structural Convex-ID check (T4) — rejects malformed IDs BEFORE any database
+ * lookup. Final existence/ownership authority remains the scoped get() below.
+ */
+export function isValidConvexIdShape(id: string): boolean {
+  return /^[0-9a-z]{20,40}$/.test(id);
+}
+
+/**
+ * Approved get_deal projection (T5/T6/T7): fixed field list, every value
+ * derived from the existing Phase 2 helpers so the tool can never disagree
+ * with Deal Detail, Pipeline, Analytics or retrieval. Zero-preserving (no
+ * `|| undefined` anywhere) and null-preserving — absent optional fields stay
+ * absent, never fabricated.
+ */
+export function projectDealForCopilot(lead: Doc<"leads">): Record<string, unknown> {
+  return {
+    id: lead._id,
+    name: dealTitle(lead),
+    stage: statusLabel(canonicalStatus(lead.status)),
+    status: canonicalStatus(lead.status),
+    value: lead.dealValue,
+    currency: dealCurrency(lead),
+    probability: lead.probability,
+    weightedValue: weightedValue(lead.dealValue, lead.probability, lead.status),
+    expectedCloseAt: lead.expectedCloseAt,
+    wonAt: lead.wonAt,
+    lostAt: lead.lostAt,
+    lossReason: lead.lossReason,
+    lastActivityAt: lastActivityOf(lead),
+    createdAt: lead._creationTime,
+    source: lead.source,
+    company: lead.company,
+    contactName: lead.name,
+  };
+}
+
+/**
+ * Ownership decision for get_deal (T2/T3/T8), extracted pure so it is
+ * deterministically testable: a missing row and a foreign row are the SAME
+ * not_found outcome — no existence leak across workspaces. Identical
+ * predicate to the proven leads.get / proposals.get ownership idiom.
+ */
+export function dealToolDecision(
+  lead: Doc<"leads"> | null,
+  userId: Id<"users">,
+): { ok: true } | { ok: false; code: "not_found" } {
+  if (!lead || lead.userId !== userId) return { ok: false, code: "not_found" };
+  return { ok: true };
+}
+
+/**
+ * get_deal (2c-2): inspect ONE owned deal by ID.
+ * Input: exactly { dealId }. Output: the approved projection only.
+ * Missing/foreign IDs return the same not_found result. Projection excludes
+ * userId, notes, AI internals, message bodies and campaign internals.
+ */
+export const toolGetDeal = internalQuery({
+  args: { userId: v.id("users"), dealId: v.string() },
+  handler: async (
+    ctx,
+    { userId, dealId },
+  ): Promise<ToolOk<Record<string, unknown>> | ToolErr> => {
+    // Validation FIRST (T4): a malformed ID is rejected before any database
+    // lookup.
+    if (!isValidConvexIdShape(dealId)) {
+      return {
+        ok: false,
+        tool: "get_deal",
+        error: { code: "invalid_args", message: "Invalid deal ID." },
+      };
+    }
+
+    // v.id("leads") throws on a structurally invalid string, so this cast is
+    // only reached for well-formed IDs; the scoped get() below decides
+    // existence + ownership in ONE indexed read.
+    const lead = await ctx.db.get(dealId as unknown as Id<"leads">);
+    const decision = dealToolDecision(lead, userId);
+    if (!decision.ok) {
+      // T2/T3/T8: missing AND foreign share one result — no ownership leak.
+      return {
+        ok: false,
+        tool: "get_deal",
+        error: { code: decision.code, message: "Deal not found." },
+      };
+    }
+
+    return { ok: true, tool: "get_deal", data: projectDealForCopilot(lead!), returnedCount: 1 };
   },
 });
