@@ -14,16 +14,22 @@ import {
   CLIENTS_LIST_DEFAULT_LIMIT,
   CLIENTS_LIST_MAX_LIMIT,
   CLIENT_DEAL_CAP,
+  GET_PROPOSALS_DEFAULT_LIMIT,
+  GET_PROPOSALS_MAX_LIMIT,
   clientToolDecision,
   dealToolDecision,
   isValidClientKey,
   isValidConvexIdShape,
   parseGetClientsArgs,
+  parseGetProposalsArgs,
   projectClientForCopilot,
   projectDealForCopilot,
+  projectProposalForCopilot,
   runGetClientsPipeline,
+  runGetProposalsPipeline,
 } from "./assistant";
 import { computeClients, filterClients, sortClients } from "../lib/clients";
+import { dealTitle } from "../lib/revenue";
 import type { Doc, Id } from "./_generated/dataModel";
 
 // ── Fixtures (no database) ──────────────────────────────────────────────────
@@ -621,5 +627,185 @@ describe("get_clients: pipeline (canonical helpers, no reimplementation)", () =>
     const { leads } = manyClientsFixture();
     const rows = runGetClientsPipeline({}, computeClients(leads, undefined));
     expect(rows.map((c) => c.name)).not.toContain("Foreign Industries");
+  });
+});
+
+// ── Phase 2c-3C: get_proposals ──────────────────────────────────────────────
+
+let propSeq = 0;
+function makeProposal(
+  overrides: Partial<Doc<"proposals">> = {},
+): Doc<"proposals"> {
+  propSeq += 1;
+  const base: Record<string, unknown> = {
+    _id: `p57aj2m9vq3xs1pwnb5te068d0a1b2c${String(propSeq).padStart(3, "0")}` as unknown as Id<"proposals">,
+    _creationTime: 1_700_000_000_000 + propSeq,
+    userId: USER_A,
+    dealId: "k57aj2m9vq3xs1pwnb5te068d0a1b2001" as unknown as Id<"leads">,
+    title: `Proposal ${propSeq}`,
+    status: "draft",
+    value: 1000,
+    createdAt: 1_700_000_000_000 + propSeq,
+    updatedAt: 1_700_000_000_000 + propSeq,
+  };
+  return { ...base, ...overrides } as unknown as Doc<"proposals">;
+}
+
+const PROPOSAL_KEY_SET = [
+  "id", "title", "status", "value", "currency", "sentAt", "acceptedAt",
+  "rejectedAt", "rejectedReason", "createdAt", "updatedAt", "dealName", "dealId",
+].sort();
+
+describe("get_proposals: argument parsing", () => {
+  test("T11 rejects non-object input", () => {
+    for (const bad of [null, undefined, 5, "x", [], true]) {
+      expect(parseGetProposalsArgs(bad).ok).toBe(false);
+    }
+  });
+  test("T11 rejects invalid/wrong-typed status", () => {
+    for (const bad of ["All", "open", "pending", 5, null, true]) {
+      expect(parseGetProposalsArgs({ status: bad }).ok).toBe(false);
+    }
+  });
+  test("T11 rejects invalid limits", () => {
+    for (const bad of [-1, 1.5, "10", null, true]) {
+      expect(parseGetProposalsArgs({ limit: bad }).ok).toBe(false);
+    }
+  });
+  test("T11 rejects unknown keys including userId", () => {
+    expect(parseGetProposalsArgs({ userId: "x" }).ok).toBe(false);
+    expect(parseGetProposalsArgs({ sort: "revenue" }).ok).toBe(false);
+  });
+  test("accepts the full valid argument shape", () => {
+    expect(parseGetProposalsArgs({ status: "sent", limit: 5 }).ok).toBe(true);
+    expect(parseGetProposalsArgs({}).ok).toBe(true);
+  });
+});
+
+describe("get_proposals: pipeline (filter/order/cap)", () => {
+  function fixture(): Doc<"proposals">[] {
+    return [
+      makeProposal({ title: "Oldest Draft", status: "draft", updatedAt: 1_700_000_100_000, value: 0 }),
+      makeProposal({ title: "Newest Sent", status: "sent", sentAt: 1_700_000_500_000, updatedAt: 1_700_000_500_000 }),
+      makeProposal({ title: "Mid Viewed", status: "viewed", sentAt: 1_700_000_300_000, updatedAt: 1_700_000_400_000 }),
+      makeProposal({ title: "Accepted One", status: "accepted", acceptedAt: 1_700_000_350_000, updatedAt: 1_700_000_350_000 }),
+      makeProposal({ title: "Rejected One", status: "rejected", rejectedAt: 1_700_000_320_000, rejectedReason: "Budget", updatedAt: 1_700_000_320_000 }),
+    ];
+  }
+
+  test("T1/T13 default: success shape, updatedAt DESC ordering, no reliance on insertion order", () => {
+    const rows = runGetProposalsPipeline({}, fixture());
+    expect(rows.map((p) => p.title)).toEqual([
+      "Newest Sent", "Mid Viewed", "Accepted One", "Rejected One", "Oldest Draft",
+    ]);
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i - 1].updatedAt).toBeGreaterThanOrEqual(rows[i].updatedAt);
+    }
+  });
+
+  test("T2 status 'all' returns across statuses", () => {
+    const rows = runGetProposalsPipeline({ status: "all" }, fixture());
+    expect(new Set(rows.map((p) => p.status)).size).toBe(5);
+  });
+
+  for (const status of ["draft", "sent", "viewed", "accepted", "rejected"] as const) {
+    test(`T3–T7 status '${status}' returns only that canonical status`, () => {
+      const rows = runGetProposalsPipeline({ status }, fixture());
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.every((p) => p.status === status)).toBe(true);
+    });
+  }
+
+  test("T8 limit: 2 returns exactly two", () => {
+    expect(runGetProposalsPipeline({ limit: 2 }, fixture()).length).toBe(2);
+  });
+
+  test("T9 hard cap: limit 1000 over >20 proposals returns at most 20", () => {
+    const many = Array.from({ length: 25 }, (_, i) =>
+      makeProposal({ title: `P${i}`, updatedAt: 1_700_001_000_000 + i }),
+    );
+    const rows = runGetProposalsPipeline({ limit: 1000 }, many);
+    expect(rows.length).toBe(GET_PROPOSALS_MAX_LIMIT);
+    expect(GET_PROPOSALS_MAX_LIMIT).toBe(20);
+  });
+
+  test("T10 limit: 0 → empty data, no error", () => {
+    const rows = runGetProposalsPipeline({ limit: 0 }, fixture());
+    expect(rows).toEqual([]);
+  });
+
+  test("T17 filtering ≡ the canonical single-predicate semantics (no reimplementation)", () => {
+    const all = fixture();
+    // Tool 'sent' output ≡ the canonical proposal-status predicate used by
+    // proposals.ts / retrieval (exact match on the canonical status value).
+    expect(runGetProposalsPipeline({ status: "sent" }, all).map((p) => p.title))
+      .toEqual(all.filter((p) => p.status === "sent").map((p) => p.title));
+    expect(runGetProposalsPipeline({ status: "accepted" }, all).map((p) => p.title))
+      .toEqual(all.filter((p) => p.status === "accepted").map((p) => p.title));
+    // Default list ≡ 'all' — absence of status never narrows.
+    expect(runGetProposalsPipeline({}, all).map((p) => p.title))
+      .toEqual(runGetProposalsPipeline({ status: "all" }, all).map((p) => p.title));
+  });
+});
+
+describe("get_proposals: projection", () => {
+  test("T12 exact 13-field projection; forbidden fields absent", () => {
+    const p = projectProposalForCopilot(
+      makeProposal({ sentAt: 1_700_000_500_000 }),
+      "Acme Expansion — Dana Cole",
+    ) as Record<string, unknown>;
+    expect(Object.keys(p).sort()).toEqual(PROPOSAL_KEY_SET);
+    for (const forbidden of ["userId", "body", "sections", "content", "lead", "rawLead", "rawDeal"]) {
+      expect(p).not.toHaveProperty(forbidden);
+    }
+    expect(p.dealName).toBe("Acme Expansion — Dana Cole");
+  });
+
+  test("T14 zero value preserved; absent optionals stay absent", () => {
+    const p = projectProposalForCopilot(makeProposal({ value: 0 }), "X") as Record<string, unknown>;
+    expect(p.value).toBe(0);
+    const q = projectProposalForCopilot(
+      makeProposal({ value: undefined, currency: undefined, sentAt: undefined, acceptedAt: undefined, rejectedAt: undefined, rejectedReason: undefined }),
+      "X",
+    ) as Record<string, unknown>;
+    expect(q.value).toBeUndefined();
+    expect(q.currency).toBeUndefined();
+    expect(q.sentAt).toBeUndefined();
+  });
+
+  test("T15 deal resolution: owned deal + safe missing-deal label (no cross-workspace lookup)", () => {
+    // Owned resolution: dealTitle semantics over the caller's own lead.
+    const ownedLead = makeClientLead({ status: "proposal", company: "Acme Expansion" });
+    const dealNames = new Map([[ownedLead._id as string, dealTitle(ownedLead)]]);
+    const p = projectProposalForCopilot(
+      makeProposal({ dealId: ownedLead._id }),
+      dealNames.get((makeProposal({ dealId: ownedLead._id }).dealId) as string) ?? dealNames.get(ownedLead._id as string) ?? "",
+    ) as Record<string, unknown>;
+    expect(p.dealId).toBe(ownedLead._id);
+    expect(p.dealName).toBe("Acme Expansion — Dana Cole");
+    // Missing/removed deal keeps the established safe label — the map built
+    // from the caller's own leads can never contain a foreign deal, so a
+    // foreign dealId resolves to the same label as a removed one (no leak).
+    const foreignId = "ffffaj2m9vq3xs1pwnb5te068d0a1b2c" as unknown as Id<"leads">;
+    expect(dealNames.get(foreignId as string)).toBeUndefined();
+    const q = projectProposalForCopilot(
+      makeProposal({ dealId: foreignId }),
+      dealNames.get(foreignId as string) ?? "Deal no longer exists",
+    ) as Record<string, unknown>;
+    expect(q.dealName).toBe("Deal no longer exists");
+    expect(q.dealId).toBe(foreignId); // the ID passes through, never a foreign name
+  });
+
+  test("T16 workspace isolation: the tool's data path is by_user-scoped", () => {
+    // Guards the real invariant: proposals and deal names come ONLY from the
+    // authenticated user's by_user queries; projection helpers are pure.
+    const source = require("fs").readFileSync("src/convex/assistant.ts", "utf8");
+    const toolBody = source.slice(
+      source.indexOf("export const toolGetProposals"),
+      source.indexOf("// ── Phase 2c-3A"),
+    );
+    expect((toolBody.match(/withIndex\("by_user"/g) ?? []).length).toBe(2);
+    expect((toolBody.match(/q\.eq\("userId", userId\)/g) ?? []).length).toBe(2);
+    expect(toolBody).toContain("dealTitle(l)");
   });
 });

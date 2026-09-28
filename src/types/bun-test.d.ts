@@ -13,6 +13,8 @@ declare module "bun:test" {
     toBeTrue(): void;
     toBeFalse(): void;
     toContain(expected: T extends (infer U)[] ? U : never): void;
+    toBeGreaterThan(expected: number): void;
+    toBeGreaterThanOrEqual(expected: number): void;
     readonly not: BunExpect<T>;
   }
   export function expect<T>(actual: T): BunExpect<T>;

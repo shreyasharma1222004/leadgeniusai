@@ -809,6 +809,157 @@ export const toolGetClients = internalQuery({
   },
 });
 
+// ── Phase 2c-3C: get_proposals ─────────────────────────────────────────────
+//
+// Bounded proposal LIST tool. Same boundary as the other tools: validated
+// arguments → authenticated read (by_user) → exact status filter →
+// updatedAt-desc ordering → hard cap → fixed 13-field projection. Statuses
+// are the canonical proposal lifecycle values (proposals.ts PROPOSAL_STATUS)
+// compared exactly — no second normalization system. Deal names resolve ONLY
+// through the caller's own leads via dealTitle; a missing/foreign deal keeps
+// the existing safe "Deal no longer exists" behavior. Proposal sections are
+// deliberately NOT projected (may be large/sensitive) — 2c-1 §3.
+
+export const GET_PROPOSALS_DEFAULT_LIMIT = 10;
+export const GET_PROPOSALS_MAX_LIMIT = 20;
+
+export type GetProposalsArgs = {
+  status?: "all" | "draft" | "sent" | "viewed" | "accepted" | "rejected";
+  limit?: number;
+};
+
+const PROPOSAL_TOOL_STATUSES = [
+  "all",
+  "draft",
+  "sent",
+  "viewed",
+  "accepted",
+  "rejected",
+] as const;
+
+/** Strict argument parsing (T11): plain object, known keys only, enum status,
+ *  integer limit ≥ 0. `limit: 0` is valid → empty result; values above the
+ *  hard cap are CLAMPED later, not rejected. Malformed input is rejected. */
+export function parseGetProposalsArgs(
+  raw: unknown,
+): { ok: true; args: GetProposalsArgs } | { ok: false } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { ok: false };
+  const o = raw as Record<string, unknown>;
+  for (const k of Object.keys(o)) {
+    if (k !== "status" && k !== "limit") return { ok: false };
+  }
+  const out: GetProposalsArgs = {};
+  if (o.status !== undefined) {
+    if (typeof o.status !== "string" || !PROPOSAL_TOOL_STATUSES.includes(o.status as never)) {
+      return { ok: false };
+    }
+    out.status = o.status as GetProposalsArgs["status"];
+  }
+  if (o.limit !== undefined) {
+    if (typeof o.limit !== "number" || !Number.isInteger(o.limit) || o.limit < 0) {
+      return { ok: false };
+    }
+    out.limit = o.limit;
+  }
+  return { ok: true, args: out };
+}
+
+/**
+ * Approved get_proposals projection (T12/T14): exactly the 13 contract
+ * fields. Zero-preserving (value: 0 stays 0 — no `|| undefined` anywhere);
+ * absent optionals stay absent. No userId, no proposal sections/bodies, no
+ * raw lead/deal objects, no campaign data.
+ */
+export function projectProposalForCopilot(
+  p: Doc<"proposals">,
+  dealName: string,
+): Record<string, unknown> {
+  return {
+    id: p._id,
+    title: p.title,
+    status: p.status,
+    value: p.value,
+    currency: p.currency,
+    sentAt: p.sentAt,
+    acceptedAt: p.acceptedAt,
+    rejectedAt: p.rejectedAt,
+    rejectedReason: p.rejectedReason,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+    dealName,
+    dealId: p.dealId,
+  };
+}
+
+/**
+ * Canonical filter/order/cap pipeline (T1–T10/T13/T17), pure + testable:
+ * exact status match ("all"/absent → no narrowing), then updatedAt DESC (the
+ * approved contract ordering), then the hard cap. Single predicates, no
+ * second business-logic implementation.
+ */
+export function runGetProposalsPipeline(
+  args: GetProposalsArgs,
+  proposals: Doc<"proposals">[],
+): Doc<"proposals">[] {
+  const status = args.status ?? "all";
+  const filtered =
+    status === "all"
+      ? proposals
+      : proposals.filter((p) => p.status === status);
+  const sorted = [...filtered].sort((a, b) => b.updatedAt - a.updatedAt);
+  const effectiveLimit = Math.min(
+    GET_PROPOSALS_MAX_LIMIT,
+    args.limit ?? GET_PROPOSALS_DEFAULT_LIMIT,
+  );
+  return sorted.slice(0, effectiveLimit);
+}
+
+/**
+ * get_proposals (2c-3C): bounded proposal list for the authenticated
+ * workspace. Two indexed reads (proposals by_user + the caller's own leads
+ * for deal-name resolution — one pass, no N+1). Default limit 10, hard cap
+ * 20, `returnedCount` = number returned.
+ */
+export const toolGetProposals = internalQuery({
+  args: { userId: v.id("users"), args: v.any() },
+  handler: async (
+    ctx,
+    { userId, args },
+  ): Promise<ToolOk<Record<string, unknown>[]> | ToolErr> => {
+    const parsed = parseGetProposalsArgs(args);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        tool: "get_proposals",
+        error: { code: "invalid_args", message: "Invalid arguments." },
+      };
+    }
+
+    const proposals = await ctx.db
+      .query("proposals")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    // Deal names resolve from the caller's OWN leads only (by_user) — the
+    // map can never contain a foreign deal, and a missing/removed deal keeps
+    // the established safe label (§9/T15).
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const dealName = new Map(leads.map((l) => [l._id as string, dealTitle(l)]));
+
+    const rows = runGetProposalsPipeline(parsed.args, proposals);
+    return {
+      ok: true,
+      tool: "get_proposals",
+      data: rows.map((p) =>
+        projectProposalForCopilot(p, dealName.get(p.dealId) ?? "Deal no longer exists"),
+      ),
+      returnedCount: rows.length,
+    };
+  },
+});
+
 // ── Phase 2c-3A: get_client ────────────────────────────────────────────────
 //
 // Same pattern as get_deal: validation → decision → projection, with the

@@ -51,6 +51,12 @@ export async function runCopilotTool(
         args: call.args ?? {},
       });
     }
+    case "get_proposals": {
+      return await ctx.runQuery(internal.assistant.toolGetProposals, {
+        userId,
+        args: call.args ?? {},
+      });
+    }
     default:
       return {
         ok: false,
