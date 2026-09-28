@@ -184,10 +184,17 @@ function retentionOf(client: ClientBaseWithExpansion): Client["retention"] {
 /**
  * Derive clients from won deals, grouped by company (or contact when no
  * company). Pure function over the caller's own records.
+ *
+ * The optional context (follow-ups, messages) enriches health evidence; when
+ * omitted, health degrades to touch-based signals only.
  */
 export function computeClients(
   leads: Lead[],
   profileProducts: string | undefined,
+  context: {
+    followUps?: FollowUp[];
+    messages?: MessageRow[];
+  } = {},
 ): Client[] {
   const groups = new Map<string, Lead[]>();
   for (const lead of leads) {
@@ -247,7 +254,7 @@ export function computeClients(
       openValue: activeDeals.reduce((s, d) => s + (d.lead.dealValue ?? 0), 0),
       lastActivityAt: activities.length ? Math.max(...activities) : undefined,
       nextActivityAt: next,
-      health: clientHealth(all, [], []),
+      health: clientHealth(all, context.followUps ?? [], context.messages ?? []),
       industry: primaryLead.industry,
       website: primaryLead.website,
       hasMultipleProducts,

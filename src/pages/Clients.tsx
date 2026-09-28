@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { formatDateTime, initials, timeAgo } from "@/lib/format";
 import { money } from "@/lib/growth";
+import { lifecycleLabel } from "@/lib/leadStatus";
 import {
   type Client,
   type ClientFilterState,
@@ -73,8 +74,11 @@ export default function ClientsPage() {
 
   const clients = useMemo(() => {
     if (leads === undefined) return undefined;
-    return computeClients(leads, profile?.products);
-  }, [leads, profile?.products]);
+    return computeClients(leads, profile?.products, {
+      followUps: followUps,
+      messages: messages,
+    });
+  }, [leads, profile?.products, followUps, messages]);
 
   // ── Detail route ───────────────────────────────────────────────────────
   if (id) {
@@ -383,7 +387,7 @@ function ClientDetail({
                       {d.role === "won"
                         ? `Won ${d.lead.wonAt !== undefined ? formatDateTime(d.lead.wonAt) : "(before timestamps were recorded)"}`
                         : d.role === "active"
-                          ? "In progress"
+                          ? lifecycleLabel(d.lead.status)
                           : "Lost"}
                       {lastActivityOf(d.lead) !== undefined &&
                         ` · last activity ${timeAgo(lastActivityOf(d.lead))}`}

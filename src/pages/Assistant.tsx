@@ -85,7 +85,13 @@ export default function AssistantPage() {
             progress: g.progress,
             unavailableReason: g.unavailableReason,
           })),
-          clients: leads !== undefined ? computeClients(leads, profile?.products) : [],
+          clients:
+            leads !== undefined
+              ? computeClients(leads, profile?.products, {
+                  followUps: followUps,
+                  messages: messages,
+                })
+              : [],
           proposals: (proposals ?? []).map((p) => ({
             _id: p._id,
             title: p.title,
