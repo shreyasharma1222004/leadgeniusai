@@ -26,7 +26,7 @@ import {
   type GoalKind,
   type GoalPeriod,
 } from "../lib/goalEngine";
-import { computeClients } from "../lib/clients";
+import { computeClients, type Client } from "../lib/clients";
 
 // ── Copilot conversation persistence (Phase 3 §2a) ─────────────────────────
 //
@@ -558,7 +558,7 @@ export const retrieveForCopilot = internalQuery({
 /** Success envelope for a single-entity tool result (2c-1 §5). */
 export type ToolOk<T> = {
   ok: true;
-  tool: "get_deal";
+  tool: string;
   data: T;
   returnedCount: number;
 };
@@ -661,5 +661,128 @@ export const toolGetDeal = internalQuery({
     }
 
     return { ok: true, tool: "get_deal", data: projectDealForCopilot(lead!), returnedCount: 1 };
+  },
+});
+
+// ── Phase 2c-3A: get_client ────────────────────────────────────────────────
+//
+// Same pattern as get_deal: validation → decision → projection, with the
+// pure parts extracted for deterministic testing. Clients are DERIVED by
+// computeClients from the authenticated user's own leads — there is no
+// client table, so a key from another workspace simply does not exist in the
+// derived set: missing and foreign are the SAME not_found (no existence
+// leak). All semantics (revenue, counts, health, retention, deal roles) come
+// verbatim from computeClients — no second definition (§6/§9).
+
+/** Client-key validation (T4): string, non-blank, ≤120 characters. */
+export function isValidClientKey(key: unknown): key is string {
+  return typeof key === "string" && key.trim().length > 0 && key.length <= 120;
+}
+
+/** Maximum related deals returned inside one get_client result (2c-1 §4). */
+export const CLIENT_DEAL_CAP = 20;
+
+/**
+ * Client resolution (T2/T3/T10), pure + testable: find the derived client
+ * whose stable key matches. Missing and foreign keys return the identical
+ * not_found decision.
+ */
+export function clientToolDecision(
+  clients: Client[],
+  clientKey: string,
+): { ok: true; client: Client } | { ok: false; code: "not_found" } {
+  const client = clients.find((c) => c.key === clientKey.trim());
+  if (!client) return { ok: false, code: "not_found" };
+  return { ok: true, client };
+}
+
+/**
+ * Approved get_client projection (T5/T6/T8/T9): fixed fields reused verbatim
+ * from the computed Client — totalRevenue/openValue/counts/health/retention
+ * are NOT recomputed here. Related deals capped at CLIENT_DEAL_CAP, each with
+ * only the eight approved fields. Zero-preserving; absent optionals stay
+ * absent. Never exposes userId, notes, emails, message bodies or AI fields.
+ */
+export function projectClientForCopilot(client: Client): Record<string, unknown> {
+  return {
+    key: client.key,
+    name: client.name,
+    contact: client.primaryLead.name,
+    industry: client.industry,
+    website: client.website,
+    totalRevenue: client.totalRevenue,
+    openValue: client.openValue,
+    wonDeals: client.wonDeals.length,
+    activeDeals: client.activeDeals.length,
+    lostDeals: client.deals.filter((d) => d.role === "lost").length,
+    lastActivityAt: client.lastActivityAt,
+    nextActivityAt: client.nextActivityAt,
+    health: { state: client.health.state, detail: client.health.detail },
+    retention: {
+      state: client.retention.state,
+      evidence: client.retention.evidence,
+    },
+    deals: client.deals.slice(0, CLIENT_DEAL_CAP).map((d) => ({
+      id: d.lead._id,
+      name: dealTitle(d.lead),
+      role: d.role,
+      value: d.lead.dealValue,
+      currency: dealCurrency(d.lead),
+      status: canonicalStatus(d.lead.status),
+      wonAt: d.lead.wonAt,
+      lastActivityAt: lastActivityOf(d.lead),
+    })),
+  };
+}
+
+/**
+ * get_client (2c-3A): inspect ONE derived client by its stable key.
+ * Input: exactly { clientKey }. Two indexed reads (leads + profile for the
+ * same products input the Clients page/snapshot use) — no N+1, no client
+ * table. Missing/foreign keys return the same not_found result.
+ */
+export const toolGetClient = internalQuery({
+  args: { userId: v.id("users"), clientKey: v.string() },
+  handler: async (
+    ctx,
+    { userId, clientKey },
+  ): Promise<ToolOk<Record<string, unknown>> | ToolErr> => {
+    // Validation FIRST (T4): reject malformed keys before any database read.
+    if (!isValidClientKey(clientKey)) {
+      return {
+        ok: false,
+        tool: "get_client",
+        error: { code: "invalid_args", message: "Invalid client key." },
+      };
+    }
+
+    // Clients are derived at read time from the caller's own records — the
+    // same derivation the Clients page and copilotSnapshot use (§3/§6).
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const profile = await ctx.db
+      .query("businessProfiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+    const clients = computeClients(leads, profile?.products);
+
+    const decision = clientToolDecision(clients, clientKey);
+    if (!decision.ok) {
+      // T2/T3/T10: missing AND foreign share one result — no ownership leak.
+      return {
+        ok: false,
+        tool: "get_client",
+        error: { code: decision.code, message: "Client not found." },
+      };
+    }
+
+    return {
+      ok: true,
+      tool: "get_client",
+      data: projectClientForCopilot(decision.client),
+      returnedCount: 1,
+    };
   },
 });

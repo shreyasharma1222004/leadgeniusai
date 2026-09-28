@@ -9,6 +9,7 @@ declare module "bun:test" {
     toEqual(expected: unknown): void;
     toHaveProperty(name: string): void;
     toBeUndefined(): void;
+    toBeDefined(): void;
     toBeTrue(): void;
     toBeFalse(): void;
     readonly not: BunExpect<T>;

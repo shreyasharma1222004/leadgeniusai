@@ -11,10 +11,15 @@
  */
 import { describe, expect, test } from "bun:test";
 import {
+  CLIENT_DEAL_CAP,
+  clientToolDecision,
   dealToolDecision,
+  isValidClientKey,
   isValidConvexIdShape,
+  projectClientForCopilot,
   projectDealForCopilot,
 } from "./assistant";
+import { computeClients } from "../lib/clients";
 import type { Doc, Id } from "./_generated/dataModel";
 
 // ── Fixtures (no database) ──────────────────────────────────────────────────
@@ -202,5 +207,202 @@ describe("get_deal: dispatcher input gate", () => {
     // The dispatcher passes userId from the authenticated session only; a
     // non-string dealId must be coerced to "" and fail the shape gate.
     expect(isValidConvexIdShape(undefined as unknown as string)).toBe(false);
+  });
+});
+
+// ── Phase 2c-3A: get_client fixtures ────────────────────────────────────────
+
+let seq = 0;
+function makeClientLead(
+  overrides: Partial<Doc<"leads">> = {},
+): Doc<"leads"> {
+  seq += 1;
+  return makeLead({
+    _id: `k57aj2m9vq3xs1pwnb5te068d0a1b2c${String(seq).padStart(3, "0")}` as unknown as Id<"leads">,
+    ...overrides,
+  } as Partial<Doc<"leads">>);
+}
+
+/** One won + one open deal for the same company → one derived client. */
+function acmeFixture() {
+  const won = makeClientLead({
+    status: "won",
+    wonAt: 1_720_000_000_000,
+    industry: "Design",
+  });
+  const open = makeClientLead({
+    status: "proposal",
+    dealValue: 12000,
+    probability: 55,
+  });
+  return { leads: [won, open], won, open };
+}
+
+// ── T4: clientKey validation ────────────────────────────────────────────────
+
+describe("get_client: clientKey validation", () => {
+  test("T4 rejects non-string / empty / whitespace-only / over-length keys", () => {
+    expect(isValidClientKey(undefined)).toBe(false);
+    expect(isValidClientKey(123)).toBe(false);
+    expect(isValidClientKey("")).toBe(false);
+    expect(isValidClientKey("   ")).toBe(false);
+    expect(isValidClientKey(String.fromCharCode(10, 9, 32))).toBe(false); // real newline, tab, space
+    expect(isValidClientKey("x".repeat(121))).toBe(false);
+  });
+  test("T4 accepts a 120-character key (boundary)", () => {
+    expect(isValidClientKey("x".repeat(120))).toBe(true);
+  });
+});
+
+// ── T2/T3/T10: resolution — missing and foreign are identical ───────────────
+
+describe("get_client: resolution", () => {
+  const { leads } = acmeFixture();
+  const clients = computeClients(leads, undefined);
+  test("T1 resolves the derived client by its stable key", () => {
+    const d = clientToolDecision(clients, "Acme Expansion");
+    expect(d.ok).toBe(true);
+  });
+  test("T2 missing client → not_found", () => {
+    expect(clientToolDecision(clients, "Ghost Corp")).toEqual({
+      ok: false,
+      code: "not_found",
+    });
+  });
+  test("T3/T10 foreign key ≡ missing key — structurally identical", () => {
+    // A key from another workspace has no derived client here; its result is
+    // byte-identical to querying a key that never existed.
+    const foreign = clientToolDecision(clients, "Someonelses Industries");
+    const missing = clientToolDecision([], "Acme Expansion");
+    expect(foreign).toEqual(missing);
+    expect(foreign).toEqual({ ok: false, code: "not_found" });
+  });
+});
+
+// ── T1/T5/T6/T8/T9: projection content, safety, zero/null correctness ──────
+
+describe("get_client: projection", () => {
+  test("T1 derived values come verbatim from computeClients semantics", () => {
+    const { leads } = acmeFixture();
+    const clients = computeClients(leads, undefined);
+    const d = clientToolDecision(clients, "Acme Expansion");
+    const p = projectClientForCopilot((d as { ok: true; client: ReturnType<typeof computeClients>[number] }).client);
+    expect(p.key).toBe("Acme Expansion");
+    expect(p.name).toBe("Acme Expansion");
+    expect(p.contact).toBe("Dana Cole"); // primaryLead = the won deal
+    expect(p.industry).toBe("Design");
+    expect(p.totalRevenue).toBe(18000); // won deal value only
+    expect(p.wonDeals).toBe(1);
+    expect(p.activeDeals).toBe(1);
+    expect(p.lostDeals).toBe(0);
+    expect(Array.isArray(p.deals)).toBe(true);
+    expect((p.deals as unknown[]).length).toBe(2);
+    // Deal roles follow the derived ClientDeal roles: won first, then active.
+    const deals = p.deals as { role: string; value?: number }[];
+    expect(deals[0].role).toBe("won");
+    expect(deals[1].role).toBe("active");
+    expect(deals[1].value).toBe(12000);
+  });
+
+  test("T5 returns ONLY approved top-level fields — no private data", () => {
+    const { leads } = acmeFixture();
+    const clients = computeClients(leads, undefined);
+    const d = clientToolDecision(clients, "Acme Expansion");
+    const p = projectClientForCopilot((d as { ok: true; client: ReturnType<typeof computeClients>[number] }).client) as Record<string, unknown>;
+    expect(Object.keys(p).sort()).toEqual(
+      [
+        "activeDeals",
+        "contact",
+        "deals",
+        "health",
+        "industry",
+        "key",
+        "lastActivityAt",
+        "lostDeals",
+        "name",
+        "nextActivityAt",
+        "openValue",
+        "retention",
+        "totalRevenue",
+        "website",
+        "wonDeals",
+      ].sort(),
+    );
+    expect(Object.keys(p.health as object).sort()).toEqual(["detail", "state"]);
+    expect(Object.keys(p.retention as object).sort()).toEqual(["evidence", "state"]);
+    expect(p).not.toHaveProperty("userId");
+    expect(p).not.toHaveProperty("primaryLead");
+  });
+
+  test("T6 related deals contain ONLY the eight approved fields", () => {
+    const { leads } = acmeFixture();
+    leads.push(makeClientLead({ status: "new", currency: "EUR", company: "Acme Expansion" }));
+    const clients = computeClients(leads, undefined);
+    const d = clientToolDecision(clients, "Acme Expansion");
+    const p = projectClientForCopilot((d as { ok: true; client: ReturnType<typeof computeClients>[number] }).client);
+    for (const deal of p.deals as Record<string, unknown>[]) {
+      expect(Object.keys(deal).sort()).toEqual(
+        ["currency", "id", "lastActivityAt", "name", "role", "status", "value", "wonAt"].sort(),
+      );
+      expect(deal).not.toHaveProperty("notes");
+      expect(deal).not.toHaveProperty("email");
+      expect(deal).not.toHaveProperty("probability");
+      expect(deal).not.toHaveProperty("score");
+    }
+    // Deal-level currency override flows through unchanged (EUR deal).
+    const eur = (p.deals as { currency?: string }[]).find((x) => x.currency === "EUR");
+    expect(eur).toBeDefined();
+  });
+
+  test("T7 related deals are capped at 20", () => {
+    const leads = [makeClientLead({ status: "won", wonAt: 1_720_000_000_000 })];
+    for (let i = 0; i < 25; i++) {
+      leads.push(makeClientLead({ status: "proposal", dealValue: 100 + i }));
+    }
+    const clients = computeClients(leads, undefined);
+    const d = clientToolDecision(clients, "Acme Expansion");
+    const p = projectClientForCopilot((d as { ok: true; client: ReturnType<typeof computeClients>[number] }).client);
+    expect((p.deals as unknown[]).length).toBe(CLIENT_DEAL_CAP);
+    expect(CLIENT_DEAL_CAP).toBe(20);
+  });
+
+  test("T8 zero values are preserved (never dropped)", () => {
+    const leads = [
+      makeClientLead({ status: "won", wonAt: 1_720_000_000_000, dealValue: 0 }),
+      makeClientLead({ status: "proposal", dealValue: 0 }),
+    ];
+    const clients = computeClients(leads, undefined);
+    const d = clientToolDecision(clients, "Acme Expansion");
+    const p = projectClientForCopilot((d as { ok: true; client: ReturnType<typeof computeClients>[number] }).client);
+    expect(p.totalRevenue).toBe(0);
+    expect(p.openValue).toBe(0);
+    const deals = p.deals as { value?: number }[];
+    expect(deals[0].value).toBe(0);
+    expect(deals[1].value).toBe(0);
+  });
+
+  test("T9 output is NOT a reimplementation — matches computeClients exactly", () => {
+    const { leads } = acmeFixture();
+    const clients = computeClients(leads, undefined);
+    const client = clients[0];
+    const p = projectClientForCopilot(client);
+    // The projection copies the computed values; it never recomputes them.
+    expect(p.totalRevenue).toBe(client.totalRevenue);
+    expect(p.openValue).toBe(client.openValue);
+    expect(p.wonDeals).toBe(client.wonDeals.length);
+    expect(p.activeDeals).toBe(client.activeDeals.length);
+    expect(p.health).toEqual(client.health);
+    expect(p.retention).toEqual(client.retention);
+    expect(p.lastActivityAt).toBe(client.lastActivityAt);
+    expect(p.nextActivityAt).toBe(client.nextActivityAt);
+  });
+
+  test("T7b absent optionals stay absent — never fabricated", () => {
+    const leads = [makeClientLead({ status: "won", wonAt: 1_720_000_000_000, industry: undefined })];
+    const clients = computeClients(leads, undefined);
+    const d = clientToolDecision(clients, "Acme Expansion");
+    const p = projectClientForCopilot((d as { ok: true; client: ReturnType<typeof computeClients>[number] }).client);
+    expect(p.industry).toBeUndefined();
+    expect(p.website).toBeUndefined();
   });
 });

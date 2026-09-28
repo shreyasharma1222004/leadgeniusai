@@ -41,6 +41,10 @@ export async function runCopilotTool(
       const dealId = typeof call.args?.dealId === "string" ? call.args.dealId : "";
       return await ctx.runQuery(internal.assistant.toolGetDeal, { userId, dealId });
     }
+    case "get_client": {
+      const clientKey = typeof call.args?.clientKey === "string" ? call.args.clientKey : "";
+      return await ctx.runQuery(internal.assistant.toolGetClient, { userId, clientKey });
+    }
     default:
       return {
         ok: false,
