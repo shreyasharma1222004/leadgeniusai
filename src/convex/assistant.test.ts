@@ -35,10 +35,16 @@ import {
   GET_FOLLOWUPS_MAX_LIMIT,
 } from "./assistant";
 import {
+  buildContinuationMessages,
+  buildToolResultPayload,
   classifyToolCallOutcome,
   detectSingleToolCall,
+  mergeToolCallDeltas,
   parseNormalizedToolCall,
+  splitFirstResponse,
   COPILOT_TOOLS,
+  type ChatMessage,
+  type ToolResultPayload,
 } from "./ai";
 import { computeClients, filterClients, sortClients } from "../lib/clients";
 import { dealTitle } from "../lib/revenue";
@@ -1142,10 +1148,227 @@ describe("2c-4A: dispatcher/argument validation remains authoritative", () => {
       expect(typeof n).toBe("string");
     }
   });
-  test("tool-call handling never executes anything: copilotReply wires detection only", () => {
+  test("2c-4B: ONE execution path, ONE continuation, no loops, no parallel tools", () => {
     const source = require("fs").readFileSync("src/convex/ai.ts", "utf8");
-    expect((source.match(/runCopilotTool\(/g) ?? []).length).toBe(1); // its definition site
-    expect((source.match(/classifyToolCallOutcome\(/g) ?? []).length).toBe(3); // def + 2 call sites
-    expect(source).not.toContain("tool_result");
+    // runCopilotTool: definition + exactly ONE execution site (in copilotReply)
+    expect((source.match(/runCopilotTool\(/g) ?? []).length).toBe(2);
+    // classifyToolCallOutcome: definition + exactly ONE D/E call site
+    expect((source.match(/classifyToolCallOutcome\(/g) ?? []).length).toBe(2);
+    // Tool definitions on the FIRST request only — the continuation omits
+    // them, so a third request is structurally impossible.
+    expect((source.match(/tools: COPILOT_TOOLS/g) ?? []).length).toBe(1);
+    expect((source.match(/parallel_tool_calls: false/g) ?? []).length).toBe(1);
+    // No loops capable of extra model requests, no parallel execution.
+    expect((source.match(/while \(/g) ?? []).length).toBe(0);
+    expect(source.includes("Promise.all")).toBe(false);
+    // §7: the tool result wrapper exists server-side, tool-call JSON is
+    // never persisted as content (single appendAssistantMessage site).
+    expect(source.includes("<tool_result>")).toBe(true);
+    const reply = source.slice(source.indexOf("export const copilotReply"));
+    expect((reply.match(/appendAssistantMessage/g) ?? []).length).toBe(1);
+    expect(reply.includes('JSON.stringify(classification.call.args)')).toBe(true);
+  });
+});
+
+// ── Phase 2c-4B: execute ONE tool + ONE continuation request ────────────────
+
+/** OpenAI streams one logical call as several partial chunks. */
+function streamedCallDeltas(name: string, argsJson: string) {
+  return [
+    { index: 0, id: "call_9", type: "function", function: { name, arguments: argsJson.slice(0, 3) } },
+    { index: 0, function: { arguments: argsJson.slice(3) } },
+  ];
+}
+
+describe("2c-4B: mergeToolCallDeltas (index merge, §1)", () => {
+  test("one logical call split across chunks merges to ONE call", () => {
+    const merged = mergeToolCallDeltas(streamedCallDeltas("get_deal", JSON.stringify({ dealId: VALID_ID })));
+    expect(merged.length).toBe(1);
+    const out = detectSingleToolCall(merged);
+    expect(out.kind).toBe("single");
+    if (out.kind === "single") {
+      expect(out.call.name).toBe("get_deal");
+      expect(out.call.args).toEqual({ dealId: VALID_ID });
+    }
+  });
+  test("raw chunk counting would have over-counted; merge prevents false too_many", () => {
+    const deltas = streamedCallDeltas("get_deal", "{}");
+    expect(deltas.length).toBe(2); // raw count
+    expect(detectSingleToolCall(deltas).kind).toBe("too_many"); // raw chunks misclassify
+    expect(detectSingleToolCall(mergeToolCallDeltas(deltas)).kind).toBe("single"); // merged is correct
+  });
+  test("two distinct logical calls stay two (too_many preserved)", () => {
+    const deltas = [
+      ...streamedCallDeltas("get_deal", "{}"),
+      { index: 1, id: "call_2", type: "function", function: { name: "get_clients", arguments: "{}" } },
+    ];
+    expect(mergeToolCallDeltas(deltas).length).toBe(2);
+    expect(detectSingleToolCall(mergeToolCallDeltas(deltas)).kind).toBe("too_many");
+  });
+  test("non-object deltas are ignored", () => {
+    expect(mergeToolCallDeltas(["x", null, 5, undefined]).length).toBe(0);
+    expect(mergeToolCallDeltas([]).length).toBe(0);
+    expect(mergeToolCallDeltas(undefined as unknown as unknown[]).length).toBe(0);
+  });
+});
+
+describe("2c-4B: splitFirstResponse (three outcomes, §2)", () => {
+  test("no tool finish + text → content (normal one-request path)", () => {
+    expect(splitFirstResponse("Here is your summary.", false)).toEqual({ kind: "content", fullText: "Here is your summary." });
+  });
+  test("tool finish → tool_call even if stray content arrived (§7: never shown)", () => {
+    expect(splitFirstResponse("stray", true)).toEqual({ kind: "tool_call" });
+    expect(splitFirstResponse("", true)).toEqual({ kind: "tool_call" });
+  });
+  test("nothing at all → empty (deterministic fallback, no retry)", () => {
+    expect(splitFirstResponse("", false)).toEqual({ kind: "empty" });
+  });
+});
+
+describe("2c-4B: each whitelisted tool resolves to exactly ONE execution candidate", () => {
+  const cases: [string, Record<string, unknown>][] = [
+    ["get_deal", { dealId: VALID_ID }],
+    ["get_client", { clientKey: "acme-corp" }],
+    ["get_clients", { sort: "revenue", limit: 5 }],
+    ["get_proposals", { status: "sent" }],
+    ["get_followups", { bucket: "overdue" }],
+  ];
+  for (const [name, args] of cases) {
+    test(`${name} merges + classifies to a single call (executed once by the single dispatcher site)`, () => {
+      const merged = mergeToolCallDeltas(streamedCallDeltas(name, JSON.stringify(args)));
+      const out = detectSingleToolCall(merged);
+      expect(out.kind).toBe("single");
+      if (out.kind === "single") {
+        expect(out.call.name).toBe(name);
+        expect(out.call.args).toEqual(args);
+      }
+    });
+  }
+});
+
+describe("2c-4B: buildToolResultPayload (bounded envelope conversion, §3)", () => {
+  test("success passes the EXISTING projection verbatim (no reshaping, no userId)", () => {
+    const lead = makeLead({ status: "won", wonAt: 1_720_000_000_000, dealValue: 18000, probability: 55 });
+    const projection = projectDealForCopilot(lead);
+    const payload = buildToolResultPayload({ ok: true, tool: "get_deal", data: projection, returnedCount: 1 });
+    expect(payload.ok).toBe(true);
+    if (payload.ok) {
+      expect(payload.data).toEqual(projection); // verbatim
+      expect(payload.returnedCount).toBe(1);
+      expect(JSON.stringify(payload).includes("userId")).toBe(false);
+    }
+  });
+  test("every error envelope collapses to a concise structured code (§9A)", () => {
+    const nf = buildToolResultPayload({ ok: false, tool: "get_deal", error: { code: "not_found", message: "Deal not found." } });
+    expect(nf).toEqual({ ok: false, code: "not_found" });
+    const ia = buildToolResultPayload({ ok: false, tool: "get_clients", error: { code: "invalid_args", message: "Invalid arguments." } });
+    expect(ia).toEqual({ ok: false, code: "invalid_args" });
+    const ut = buildToolResultPayload({ ok: false, tool: "x", error: { code: "unknown_tool", message: "Unknown tool: x" } });
+    expect(ut).toEqual({ ok: false, code: "unknown_tool" });
+    // No internals survive: no messages, no stacks, no db details.
+    for (const p of [nf, ia, ut]) {
+      expect(JSON.stringify(p).includes("message")).toBe(false);
+      expect(JSON.stringify(p).includes("stack")).toBe(false);
+      expect(JSON.stringify(p).includes("userId")).toBe(false);
+    }
+  });
+  test("unexpected shapes degrade to the generic failed code — never a crash", () => {
+    expect(buildToolResultPayload(null)).toEqual({ ok: false, code: "failed" });
+    expect(buildToolResultPayload("boom")).toEqual({ ok: false, code: "failed" });
+    expect(buildToolResultPayload(undefined)).toEqual({ ok: false, code: "failed" });
+    expect(buildToolResultPayload({ ok: true })).toEqual({ ok: false, code: "failed" }); // no data field
+  });
+  test("string-error convention maps through (established tool error codes)", () => {
+    expect(buildToolResultPayload({ ok: false, tool: "t", error: "unavailable" })).toEqual({ ok: false, code: "unavailable" });
+  });
+});
+
+describe("2c-4B: buildContinuationMessages (native tool-calling structure, §4/§5)", () => {
+  const assistantToolCallMessage: ChatMessage = {
+    role: "assistant",
+    content: null,
+    tool_calls: [{ id: "call_9", type: "function", function: { name: "get_deal", arguments: "{}" } }],
+  };
+  test("produces the assistant tool-call turn + the tool result turn in order", () => {
+    const msgs = buildContinuationMessages({
+      assistantToolCallMessage,
+      toolResult: { ok: true, data: { name: "Acme" }, returnedCount: 1 },
+      toolCallId: "call_9",
+    });
+    expect(msgs.length).toBe(2);
+    expect(msgs[0]).toEqual(assistantToolCallMessage); // verbatim
+    expect(msgs[1].role).toBe("tool");
+    expect((msgs[1] as { tool_call_id: string }).tool_call_id).toBe("call_9"); // pairs with the call
+  });
+  test("tool result is DATA, not instructions (§4): wrapped, prefixed, id-free on success", () => {
+    const msgs = buildContinuationMessages({
+      assistantToolCallMessage,
+      toolResult: { ok: true, data: { name: "Acme", value: 18000 }, returnedCount: 1 },
+      toolCallId: "call_9",
+    });
+    const content = (msgs[1] as { content: string }).content;
+    expect(content.includes("<tool_result>")).toBe(true);
+    expect(content.includes("NOT instructions")).toBe(true);
+    expect(content.includes("never as directives")).toBe(true);
+    expect(content.includes("never as directives")).toBe(true);
+    expect(content.includes(JSON.stringify({ ok: true, data: { name: "Acme", value: 18000 }, returnedCount: 1 }))).toBe(true);
+    expect(content.includes("userId")).toBe(false);
+  });
+  test("error payload reaches the model as a structured error — nothing more", () => {
+    const msgs = buildContinuationMessages({
+      assistantToolCallMessage,
+      toolResult: { ok: false, code: "not_found" },
+      toolCallId: "call_9",
+    });
+    const content = (msgs[1] as { content: string }).content;
+    expect(content.includes('"code":"not_found"')).toBe(true);
+    expect(content.includes("message")).toBe(false);
+    expect(content.includes("stack")).toBe(false);
+  });
+  test("payload is size-capped (bounded continuation context, §12)", () => {
+    const big = { ok: true, data: { blob: "x".repeat(50000) }, returnedCount: 1 } as ToolResultPayload;
+    const msgs = buildContinuationMessages({ assistantToolCallMessage, toolResult: big, toolCallId: "c" });
+    const content = (msgs[1] as { content: string }).content;
+    expect(content.length).toBeLessThan(13000);
+  });
+});
+
+describe("2c-4B: structural source invariants (§10/§13/§15)", () => {
+  const source = require("fs").readFileSync("src/convex/ai.ts", "utf8");
+  test("exactly two request sites + hard counters guarded in code", () => {
+    const reply = source.slice(source.indexOf("export const copilotReply"));
+    expect((reply.match(/await fetch\(OPENAI_URL/g) ?? []).length).toBe(1); // one fetch site, called ≤2×
+    expect((reply.match(/modelRequestCount >= 2/g) ?? []).length).toBe(1); // request ceiling enforced
+    expect((reply.match(/toolExecutionCount >= 1/g) ?? []).length).toBe(1); // tool ceiling enforced
+    expect((reply.match(/modelRequestCount \+= 1/g) ?? []).length).toBe(1);
+    expect((reply.match(/toolExecutionCount \+= 1/g) ?? []).length).toBe(1);
+  });
+  test("no retry loop / no recursion / no parallel execution", () => {
+    expect((source.match(/while \(/g) ?? []).length).toBe(0);
+    expect(source.includes("Promise.all")).toBe(false);
+    expect((source.match(/runCopilotTool\(/g) ?? []).length).toBe(2); // def + ONE call site
+  });
+  test("continuation omits tool definitions (third request structurally impossible)", () => {
+    expect((source.match(/tools: COPILOT_TOOLS/g) ?? []).length).toBe(1);
+    expect(source.includes('includeTools\n')).toBe(false);
+    expect(source.includes("includeTools ?")).toBe(true);
+  });
+  test("§7: tool-call JSON never becomes assistant content — single insert site fed only by content", () => {
+    const reply = source.slice(source.indexOf("export const copilotReply"));
+    expect((reply.match(/appendAssistantMessage/g) ?? []).length).toBe(1);
+    // The writer receives content deltas only; the merged tool calls flow to
+    // the dispatcher, never into persistence.
+    expect(reply.includes("writeStreamedAnswer(outcome.fullText")).toBe(true);
+    expect(reply.includes("writeStreamedAnswer(second.resFull")).toBe(true);
+    expect(reply.includes("writeStreamedAnswer(mergedCalls")).toBe(false);
+  });
+  test("§9B/D: failure paths return without a third request", () => {
+    const reply = source.slice(source.indexOf("export const copilotReply"));
+    expect(reply.includes("if (!first) return null;")).toBe(true);
+    expect(reply.includes("if (!second) return null;")).toBe(true);
+  });
+  test("duplicate-submit protection untouched (one invocation per submission)", () => {
+    const ui = require("fs").readFileSync("src/pages/Assistant.tsx", "utf8");
+    expect((ui.match(/inFlightRef/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 });

@@ -14,6 +14,7 @@ declare module "bun:test" {
     toBeFalse(): void;
     toContain(expected: T extends (infer U)[] ? U : never): void;
     toBeGreaterThan(expected: number): void;
+    toBeLessThan(expected: number): void;
     toBeLessThanOrEqual(expected: number): void;
     toBeGreaterThanOrEqual(expected: number): void;
     readonly not: BunExpect<T>;
