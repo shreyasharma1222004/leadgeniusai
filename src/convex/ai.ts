@@ -831,13 +831,26 @@ export const copilotReply = action({
       cleanMessage.toLowerCase(),
       trimmedHistory.map((m) => ({ role: m.role, content: m.content })),
     );
-    const retrieved = retrievalCategory
-      ? await ctx.runQuery(internal.assistant.retrieveForCopilot, {
+    // §2b-6 (§6): retrieval is NONESSENTIAL. If it fails, degrade to the
+    // snapshot-only path instead of failing the whole request — the model
+    // still gets every other piece of verified context. No retrieval retry.
+    let retrieved: {
+      category: string;
+      totalMatching: number;
+      partial: boolean;
+      records: unknown[];
+    } | null = null;
+    if (retrievalCategory) {
+      try {
+        retrieved = await ctx.runQuery(internal.assistant.retrieveForCopilot, {
           userId,
           category: retrievalCategory,
           limit: 12,
-        })
-      : null;
+        });
+      } catch {
+        retrieved = null;
+      }
+    }
     // §2b-4 — recent-record continuity: only for conversational follow-ups
     // (inherited category). Explicit intent replaces the conversational
     // context with the fresh retrieval instead (§3/§5). No extra queries or
@@ -957,7 +970,16 @@ export const copilotReply = action({
 
       // Final authoritative write: the persisted message becomes exactly the
       // accumulated text. One row, one final content — no duplicates.
-      await flush(true);
+      // §2b-6 (§5/§8): once a row exists we NEVER degrade to null — a failed
+      // final flush leaves the last throttled state persisted, and returning
+      // null here would make the client persist a SECOND (fallback) assistant
+      // message after the partial one.
+      try {
+        await flush(true);
+      } catch {
+        // Last throttled write already reached the database; report honestly
+        // as partial rather than triggering the fallback path.
+      }
       // "partial" tells the UI the reply may be incomplete so it can say so
       // honestly instead of pretending the response finished.
       return interrupted ? "partial" : "ok";

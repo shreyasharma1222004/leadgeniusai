@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { ArrowRight, Bot, MessageSquarePlus, Sparkles, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
@@ -78,6 +78,11 @@ export default function AssistantPage() {
   const [thinking, setThinking] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
+  // §2b-6 (§10): synchronous duplicate-submit guard. `thinking` alone has a
+  // stale-closure window — two submits in the same tick could both pass the
+  // check and fire two model requests. The ref is set synchronously in the
+  // submit handler, so one explicit submission can only ever reach the model.
+  const inFlightRef = useRef(false);
 
   // Auto-select the most recent conversation once the list loads (§4).
   useEffect(() => {
@@ -190,6 +195,8 @@ export default function AssistantPage() {
   const ask = async (question: string) => {
     const trimmed = question.trim();
     if (!trimmed || !ready || thinking) return;
+    if (inFlightRef.current) return; // a submission is already generating
+    inFlightRef.current = true;
     setThinking(true);
     setSendError(null);
     setFallbackNotice(null);
@@ -265,10 +272,11 @@ export default function AssistantPage() {
       setInput("");
     } catch {
       setSendError(
-        "Your message was saved, but the reply couldn't be generated — try again in a moment.",
+        "I couldn't complete that response — your message was saved. Please try again in a moment.",
       );
     } finally {
       setThinking(false);
+      inFlightRef.current = false;
     }
   };
 
