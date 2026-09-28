@@ -8,7 +8,17 @@ import {
 } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { computeClosedStats, computePipelineStats } from "../lib/revenue";
+import {
+  computeClosedStats,
+  computePipelineStats,
+  dealCurrency,
+  dealTitle,
+  flaggedOpenDeals,
+  isOpenDeal,
+  lastActivityOf,
+  stageLastAtMap,
+} from "../lib/revenue";
+import { canonicalStatus, statusLabel } from "../lib/leadStatus";
 import {
   computeGoalCurrent,
   formatGoalValue,
@@ -317,6 +327,190 @@ export const copilotSnapshot = internalQuery({
         healthyCount: clients.filter((c) => c.health.state === "healthy").length,
         top: topClients,
       },
+    };
+  },
+});
+
+// ── Phase 3 §2b-2: read-only record retrieval for the Copilot ─────────────
+//
+// Deterministic, bounded, category-driven retrieval over the caller's OWN
+// records. The category is chosen SERVER-SIDE from the user's question (§8 —
+// the model never picks queries and never gets raw database access). Every
+// category reuses the Phase 2 definitions (flaggedOpenDeals/dealFlags,
+// computeClients, dealCurrency, statusLabel) so Copilot record answers agree
+// with Dashboard, Pipeline, Clients and Analytics. Projections only — no
+// message bodies, no AI fields, no raw documents.
+export const retrieveForCopilot = internalQuery({
+  args: {
+    userId: v.id("users"),
+    category: v.union(
+      v.literal("leads_followup"),
+      v.literal("deals_open"),
+      v.literal("deals_attention"),
+      v.literal("clients_top"),
+      v.literal("proposals_pending"),
+    ),
+    limit: v.number(),
+  },
+  handler: async (ctx, { userId, category, limit }) => {
+    const cap = Math.max(1, Math.min(20, Math.round(limit)));
+    const now = Date.now();
+
+    if (category === "deals_open" || category === "deals_attention") {
+      const leads = await ctx.db
+        .query("leads")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
+      if (category === "deals_open") {
+        const open = leads.filter(isOpenDeal);
+        const rows = [...open]
+          .sort((a, b) => (b.dealValue ?? 0) - (a.dealValue ?? 0))
+          .slice(0, cap);
+        return {
+          category,
+          totalMatching: open.length,
+          partial: open.length > rows.length,
+          records: rows.map((l) => ({
+            name: dealTitle(l),
+            stage: statusLabel(canonicalStatus(l.status)),
+            value: l.dealValue,
+            currency: dealCurrency(l),
+            probability: l.probability,
+            expectedCloseAt: l.expectedCloseAt,
+            lastActivityAt: lastActivityOf(l),
+            createdAt: l._creationTime,
+          })),
+        };
+      }
+      // deals_attention: exactly the flaggedOpenDeals definition the
+      // Analytics "Deals needing attention" section uses (flag rank, then
+      // value) — same signals, same thresholds, no new definitions.
+      const history = await ctx.db
+        .query("dealStageHistory")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
+      const flagged = flaggedOpenDeals(leads, stageLastAtMap(history), [], now);
+      return {
+        category,
+        totalMatching: flagged.length,
+        partial: flagged.length > cap,
+        records: flagged.slice(0, cap).map(({ lead, flags }) => ({
+          name: dealTitle(lead),
+          stage: statusLabel(canonicalStatus(lead.status)),
+          value: lead.dealValue,
+          currency: dealCurrency(lead),
+          probability: lead.probability,
+          flags: flags.map((f) => f.detail),
+          lastActivityAt: lastActivityOf(lead),
+          expectedCloseAt: lead.expectedCloseAt,
+        })),
+      };
+    }
+
+    if (category === "leads_followup") {
+      const leads = await ctx.db
+        .query("leads")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
+      const open = leads.filter(
+        (l) => !["won", "lost"].includes(canonicalStatus(l.status)),
+      );
+      // Overdue follow-ups first, then staled last activity, then untouched
+      // new leads (oldest first). Real timestamps only — never invented.
+      const quietness = (l: Parameters<typeof lastActivityOf>[0]) => {
+        const last = lastActivityOf(l);
+        return last === undefined ? Number.POSITIVE_INFINITY : now - last;
+      };
+      const ranked = [...open].sort((a, b) => {
+        const aOver = a.nextFollowUpAt !== undefined && a.nextFollowUpAt < now ? 0 : 1;
+        const bOver = b.nextFollowUpAt !== undefined && b.nextFollowUpAt < now ? 0 : 1;
+        return aOver - bOver || quietness(a) - quietness(b);
+      });
+      const rows = ranked.slice(0, cap);
+      return {
+        category,
+        totalMatching: open.length,
+        partial: open.length > rows.length,
+        records: rows.map((l) => ({
+          name: l.name,
+          company: l.company,
+          stage: statusLabel(canonicalStatus(l.status)),
+          source: l.source,
+          score: l.score,
+          tags: l.tags,
+          lastActivityAt: lastActivityOf(l),
+          nextFollowUpAt: l.nextFollowUpAt,
+          dealValue: l.dealValue,
+          currency: dealCurrency(l),
+          createdAt: l._creationTime,
+        })),
+      };
+    }
+
+    if (category === "clients_top") {
+      const profile = await ctx.db
+        .query("businessProfiles")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .first();
+      const leads = await ctx.db
+        .query("leads")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
+      const clients = computeClients(leads, profile?.products);
+      // Ordered by the same recorded-revenue definition the Clients page and
+      // the Copilot snapshot use (Σ dealValue over won deals).
+      const ranked = [...clients].sort((a, b) => b.totalRevenue - a.totalRevenue);
+      const rows = ranked.slice(0, cap);
+      return {
+        category,
+        totalMatching: clients.length,
+        partial: clients.length > rows.length,
+        records: rows.map((c) => ({
+          name: c.name,
+          contact: c.primaryLead.name,
+          industry: c.industry,
+          totalRevenue: c.totalRevenue,
+          wonDeals: c.wonDeals.length,
+          activeDeals: c.activeDeals.length,
+          lastActivityAt: c.lastActivityAt,
+          health: c.health.state,
+          healthDetail: c.health.detail,
+        })),
+      };
+    }
+
+    // proposals_pending — sent/viewed proposals awaiting an outcome, newest
+    // send first. Deal names resolve from the caller's own leads only.
+    const proposals = await ctx.db
+      .query("proposals")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const pending = proposals.filter(
+      (p) => p.status === "sent" || p.status === "viewed",
+    );
+    const sorted = [...pending].sort(
+      (a, b) => (b.sentAt ?? b.updatedAt) - (a.sentAt ?? a.updatedAt),
+    );
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const dealName = new Map(leads.map((l) => [l._id as string, dealTitle(l)]));
+    const capped = sorted.slice(0, cap);
+    return {
+      category,
+      totalMatching: pending.length,
+      partial: pending.length > capped.length,
+      records: capped.map((p) => ({
+        title: p.title,
+        deal: dealName.get(p.dealId) ?? "Deal no longer exists",
+        status: p.status,
+        value: p.value,
+        currency: p.currency,
+        sentAt: p.sentAt,
+        updatedAt: p.updatedAt,
+        createdAt: p.createdAt,
+      })),
     };
   },
 });
