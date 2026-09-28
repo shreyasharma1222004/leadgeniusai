@@ -163,8 +163,10 @@ export const markSent = mutation({
       );
     }
     await ctx.db.patch(id, { status: "sent", sentAt: Date.now(), updatedAt: Date.now() });
-    // Proposals count as deal activity.
-    await ctx.db.patch(proposal.dealId, { lastActivityAt: Date.now() });
+    // Proposals count as deal activity — but only if the linked deal still
+    // exists (legacy data can hold a proposal whose deal was removed).
+    const deal = await ctx.db.get(proposal.dealId);
+    if (deal) await ctx.db.patch(proposal.dealId, { lastActivityAt: Date.now() });
   },
 });
 
@@ -183,7 +185,8 @@ export const markAccepted = mutation({
       rejectedReason: undefined,
       updatedAt: Date.now(),
     });
-    await ctx.db.patch(proposal.dealId, { lastActivityAt: Date.now() });
+    const deal = await ctx.db.get(proposal.dealId);
+    if (deal) await ctx.db.patch(proposal.dealId, { lastActivityAt: Date.now() });
   },
 });
 
@@ -203,7 +206,8 @@ export const markRejected = mutation({
       rejectedReason: clean || undefined,
       updatedAt: Date.now(),
     });
-    await ctx.db.patch(proposal.dealId, { lastActivityAt: Date.now() });
+    const deal = await ctx.db.get(proposal.dealId);
+    if (deal) await ctx.db.patch(proposal.dealId, { lastActivityAt: Date.now() });
   },
 });
 

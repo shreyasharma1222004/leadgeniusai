@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { formatDateTime, timeAgo } from "@/lib/format";
-import { money } from "@/lib/growth";
+import { currencySymbol, money } from "@/lib/growth";
 import { cn } from "@/lib/utils";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
@@ -534,7 +534,7 @@ export default function ProposalsPage() {
                   </div>
                 )}
                 <div className="grid gap-1.5">
-                  <Label htmlFor="p-value">Value ($, optional)</Label>
+                  <Label htmlFor="p-value">Value ({currencySymbol(workspaceCurrency)}, optional)</Label>
                   <Input id="p-value" value={value} onChange={(e) => setValue(e.target.value)} inputMode="numeric" placeholder="12000" />
                 </div>
               </div>
