@@ -11,15 +11,19 @@
  */
 import { describe, expect, test } from "bun:test";
 import {
+  CLIENTS_LIST_DEFAULT_LIMIT,
+  CLIENTS_LIST_MAX_LIMIT,
   CLIENT_DEAL_CAP,
   clientToolDecision,
   dealToolDecision,
   isValidClientKey,
   isValidConvexIdShape,
+  parseGetClientsArgs,
   projectClientForCopilot,
   projectDealForCopilot,
+  runGetClientsPipeline,
 } from "./assistant";
-import { computeClients } from "../lib/clients";
+import { computeClients, filterClients, sortClients } from "../lib/clients";
 import type { Doc, Id } from "./_generated/dataModel";
 
 // ── Fixtures (no database) ──────────────────────────────────────────────────
@@ -404,5 +408,218 @@ describe("get_client: projection", () => {
     const p = projectClientForCopilot((d as { ok: true; client: ReturnType<typeof computeClients>[number] }).client);
     expect(p.industry).toBeUndefined();
     expect(p.website).toBeUndefined();
+  });
+});
+
+// ── Phase 2c-3B: get_clients ────────────────────────────────────────────────
+
+describe("get_clients: argument parsing", () => {
+  test("T1 valid empty args parse to defaults", () => {
+    const r = parseGetClientsArgs({});
+    expect(r.ok).toBe(true);
+  });
+  test("T9 rejects non-object input", () => {
+    for (const bad of [null, undefined, 5, "x", [], true]) {
+      expect(parseGetClientsArgs(bad).ok).toBe(false);
+    }
+  });
+  test("T9 rejects invalid sort values", () => {
+    for (const bad of ["Revenue", "REVENUE", "value", 5, null]) {
+      expect(parseGetClientsArgs({ sort: bad }).ok).toBe(false);
+    }
+  });
+  test("T9 rejects malformed filter objects", () => {
+    expect(parseGetClientsArgs({ filter: "active" }).ok).toBe(false);
+    expect(parseGetClientsArgs({ filter: [] }).ok).toBe(false);
+    expect(parseGetClientsArgs({ filter: { hasActiveDeals: "yes" } }).ok).toBe(false);
+    expect(parseGetClientsArgs({ filter: { minRevenue: 1 } }).ok).toBe(false);
+    expect(parseGetClientsArgs({ filter: { unknown: true } }).ok).toBe(false);
+  });
+  test("T9 rejects invalid limits", () => {
+    for (const bad of [-1, 1.5, "10", null, true]) {
+      expect(parseGetClientsArgs({ limit: bad }).ok).toBe(false);
+    }
+  });
+  test("T9 rejects unknown top-level keys", () => {
+    expect(parseGetClientsArgs({ userId: "x" }).ok).toBe(false);
+    expect(parseGetClientsArgs({ status: "open" }).ok).toBe(false);
+  });
+  test("accepts the full valid argument shape", () => {
+    const r = parseGetClientsArgs({
+      sort: "activity",
+      filter: { hasActiveDeals: true, minRevenue: false },
+      limit: 5,
+    });
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("get_clients: pipeline (canonical helpers, no reimplementation)", () => {
+  function manyClientsFixture(): { leads: Doc<"leads">[]; all: ReturnType<typeof computeClients> } {
+    const leads: Doc<"leads">[] = [];
+    // Alpha: highest revenue, active deal, recent activity
+    leads.push(makeClientLead({ status: "won", dealValue: 30000, wonAt: 1_720_000_000_000, company: "Alpha Corp" }));
+    leads.push(makeClientLead({ status: "proposal", dealValue: 4000, lastActivityAt: 1_725_000_000_000, company: "Alpha Corp" }));
+    // Beta: mid revenue, active deal, older activity
+    leads.push(makeClientLead({ status: "won", dealValue: 20000, wonAt: 1_719_000_000_000, company: "Beta Group", lastActivityAt: 1_715_000_000_000 }));
+    leads.push(makeClientLead({ status: "discovery", dealValue: 9000, company: "Beta Group" }));
+    // Gamma: low revenue, no active deals, silent
+    leads.push(makeClientLead({ status: "won", dealValue: 5000, wonAt: 1_718_000_000_000, company: "Gamma LLC", lastActivityAt: 1_700_000_000_000 }));
+    // Delta: zero revenue, no active deals
+    leads.push(makeClientLead({ status: "won", dealValue: 0, wonAt: 1_717_000_000_000, company: "Delta Co" }));
+    return { leads, all: computeClients(leads, undefined) };
+  }
+
+  test("T1 default args → canonical default ordering (revenue), default limit", () => {
+    const { leads, all } = manyClientsFixture();
+    const rows = runGetClientsPipeline({}, computeClients(leads, undefined));
+    expect(rows.length).toBe(Math.min(CLIENTS_LIST_DEFAULT_LIMIT, all.length));
+    expect(rows.map((c) => c.name)).toEqual(sortClients(all, "revenue").slice(0, rows.length).map((c) => c.name));
+  });
+
+  test("T2 revenue sort → highest recorded revenue first", () => {
+    const { leads } = manyClientsFixture();
+    const rows = runGetClientsPipeline({ sort: "revenue" }, computeClients(leads, undefined));
+    expect(rows[0].name).toBe("Alpha Corp");
+    expect(rows[0].totalRevenue).toBe(30000);
+    expect(rows[1].totalRevenue).toBe(20000);
+    expect(rows[2].totalRevenue).toBe(5000);
+  });
+
+  test("T3 activity sort ≡ canonical sortClients 'activity'", () => {
+    const { leads, all } = manyClientsFixture();
+    const rows = runGetClientsPipeline({ sort: "activity" }, computeClients(leads, undefined));
+    expect(rows.map((c) => c.name)).toEqual(sortClients(all, "activity").map((c) => c.name));
+  });
+
+  test("T4 name sort ≡ canonical alphabetical ordering", () => {
+    const { leads, all } = manyClientsFixture();
+    const rows = runGetClientsPipeline({ sort: "name" }, computeClients(leads, undefined));
+    expect(rows.map((c) => c.name)).toEqual(sortClients(all, "name").map((c) => c.name));
+    expect(rows.map((c) => c.name)).toEqual([...rows.map((c) => c.name)].sort((a, b) => a.localeCompare(b)));
+  });
+
+  test("T5 hasActiveDeals filter → only clients with active deals", () => {
+    const { leads } = manyClientsFixture();
+    const rows = runGetClientsPipeline(
+      { filter: { hasActiveDeals: true } },
+      computeClients(leads, undefined),
+    );
+    expect(rows.map((c) => c.name).sort()).toEqual(["Alpha Corp", "Beta Group"]);
+    // false applies no narrowing — the canonical helper has no inverse filter.
+    const rowsFalse = runGetClientsPipeline(
+      { filter: { hasActiveDeals: false } },
+      computeClients(leads, undefined),
+    );
+    expect(rowsFalse.length).toBe(4);
+  });
+
+  test("T6 minRevenue filter uses the canonical 'has recorded revenue' threshold", () => {
+    const { leads } = manyClientsFixture();
+    const rows = runGetClientsPipeline(
+      { filter: { minRevenue: true } },
+      computeClients(leads, undefined),
+    );
+    expect(rows.map((c) => c.name).sort()).toEqual(["Alpha Corp", "Beta Group", "Gamma LLC"]);
+    // Canonical consistency: identical to filterClients with minRevenue "gt0".
+    const canonical = sortClients(
+      filterClients(computeClients(leads, undefined), { health: "all", minRevenue: "gt0", active: "all", q: "" }),
+      "revenue",
+    );
+    expect(rows.map((c) => c.name)).toEqual(canonical.map((c) => c.name));
+  });
+
+  test("T7 limit: 2 returns exactly two matching clients", () => {
+    const { leads } = manyClientsFixture();
+    const rows = runGetClientsPipeline({ limit: 2 }, computeClients(leads, undefined));
+    expect(rows.length).toBe(2);
+  });
+
+  test("T8 hard cap: limit 1000 over >20 clients returns at most 20", () => {
+    const leads: Doc<"leads">[] = [];
+    for (let i = 0; i < 25; i++) {
+      leads.push(makeClientLead({ status: "won", dealValue: 100 + i, wonAt: 1_720_000_000_000, company: `House ${String(i).padStart(2, "0")}` }));
+    }
+    const rows = runGetClientsPipeline({ limit: 1000 }, computeClients(leads, undefined));
+    expect(rows.length).toBe(20);
+  });
+
+  test("T10 zero preservation: totalRevenue/openValue/deal value of 0 stay 0", () => {
+    const { leads } = manyClientsFixture();
+    const rows = runGetClientsPipeline({ sort: "name" }, computeClients(leads, undefined));
+    const delta = rows.find((c) => c.name === "Delta Co");
+    expect(delta).toBeDefined();
+    const projected = projectClientForCopilot(delta!);
+    expect(projected.totalRevenue).toBe(0);
+    expect(projected.openValue).toBe(0);
+    const deals = projected.deals as { value?: number }[];
+    expect(deals.every((d) => d.value === 0)).toBe(true);
+  });
+
+  test("T11 projection safety: exact top-level + nested key sets per client", () => {
+    const { leads } = manyClientsFixture();
+    const rows = runGetClientsPipeline({}, computeClients(leads, undefined));
+    for (const c of rows) {
+      const p = projectClientForCopilot(c) as Record<string, unknown>;
+      expect(Object.keys(p).sort()).toEqual(
+        [
+          "activeDeals", "contact", "deals", "health", "industry", "key",
+          "lastActivityAt", "lostDeals", "name", "nextActivityAt", "openValue",
+          "retention", "totalRevenue", "website", "wonDeals",
+        ].sort(),
+      );
+      expect(Object.keys(p.health as object).sort()).toEqual(["detail", "state"]);
+      expect(Object.keys(p.retention as object).sort()).toEqual(["evidence", "state"]);
+      expect(p).not.toHaveProperty("userId");
+      expect(p).not.toHaveProperty("primaryLead");
+    }
+  });
+
+  test("T12 related deals expose exactly the 8 approved fields", () => {
+    const { leads } = manyClientsFixture();
+    const rows = runGetClientsPipeline({}, computeClients(leads, undefined));
+    for (const c of rows) {
+      for (const deal of (projectClientForCopilot(c).deals as Record<string, unknown>[])) {
+        expect(Object.keys(deal).sort()).toEqual(
+          ["currency", "id", "lastActivityAt", "name", "role", "status", "value", "wonAt"].sort(),
+        );
+        for (const forbidden of ["notes", "email", "probability", "score", "userId"]) {
+          expect(deal).not.toHaveProperty(forbidden);
+        }
+      }
+    }
+  });
+
+  test("T13 tool ordering ≡ computeClients + canonical helpers (no reimplementation)", () => {
+    const { leads, all } = manyClientsFixture();
+    for (const sort of ["revenue", "activity", "name"] as const) {
+      const tool = runGetClientsPipeline({ sort }, computeClients(leads, undefined));
+      const canonical = sortClients(
+        filterClients(all, { health: "all", minRevenue: "", active: "all", q: "" }),
+        sort,
+      ).slice(0, CLIENTS_LIST_MAX_LIMIT);
+      expect(tool.map((c) => c.name)).toEqual(canonical.map((c) => c.name));
+    }
+  });
+
+  test("T14 workspace isolation: the tool's data path is by_user-scoped", () => {
+    // computeClients is workspace-agnostic BY DESIGN (pure derivation over
+    // its input), so isolation is enforced at the data-access layer: the
+    // tool must feed it ONLY rows from the authenticated user's by_user
+    // query. This guards that invariant — removing the scoping from
+    // toolGetClients fails this test.
+    const source = require("fs").readFileSync("src/convex/assistant.ts", "utf8");
+    const toolBody = source.slice(
+      source.indexOf("export const toolGetClients"),
+      source.indexOf("// ── Phase 2c-3A"),
+    );
+    expect(toolBody).toContain('withIndex("by_user"');
+    expect(toolBody).toContain('q.eq("userId", userId)');
+    expect(toolBody).toContain("computeClients(leads, profile?.products)");
+    // And with correctly scoped input, the output contains only that
+    // workspace's clients (positive control).
+    const { leads } = manyClientsFixture();
+    const rows = runGetClientsPipeline({}, computeClients(leads, undefined));
+    expect(rows.map((c) => c.name)).not.toContain("Foreign Industries");
   });
 });

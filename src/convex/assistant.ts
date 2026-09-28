@@ -26,7 +26,13 @@ import {
   type GoalKind,
   type GoalPeriod,
 } from "../lib/goalEngine";
-import { computeClients, type Client } from "../lib/clients";
+import {
+  computeClients,
+  filterClients,
+  sortClients,
+  type Client,
+  type ClientFilterState,
+} from "../lib/clients";
 
 // ── Copilot conversation persistence (Phase 3 §2a) ─────────────────────────
 //
@@ -661,6 +667,145 @@ export const toolGetDeal = internalQuery({
     }
 
     return { ok: true, tool: "get_deal", data: projectDealForCopilot(lead!), returnedCount: 1 };
+  },
+});
+
+// ── Phase 2c-3B: get_clients ───────────────────────────────────────────────
+//
+// Bounded client LIST tool. Same boundary as get_deal/get_client: validated
+// arguments → authenticated read (by_user) → computeClients → the CANONICAL
+// sortClients/filterClients semantics from the Clients page → hard cap →
+// per-client projection reusing projectClientForCopilot verbatim. No second
+// client identity, no new sorting/filtering/revenue rules (§4/§7/§8).
+
+export type GetClientsArgs = {
+  sort?: "revenue" | "activity" | "name";
+  filter?: { hasActiveDeals?: boolean; minRevenue?: boolean };
+  limit?: number;
+};
+
+export const CLIENTS_LIST_DEFAULT_LIMIT = 10;
+export const CLIENTS_LIST_MAX_LIMIT = 20;
+
+const CLIENTS_SORTS = ["revenue", "activity", "name"] as const;
+
+/**
+ * Strict argument parsing (T9): input must be a plain object with only the
+ * known keys; enums/booleans/integer limits validated — malformed input is
+ * REJECTED, never silently interpreted. `limit: 0` is valid and yields an
+ * empty result (the caller asked for none); limits above the hard cap are
+ * CLAMPED to 20, not rejected (bounded read-only contract, §2/§9).
+ */
+export function parseGetClientsArgs(
+  raw: unknown,
+): { ok: true; args: GetClientsArgs } | { ok: false } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { ok: false };
+  const o = raw as Record<string, unknown>;
+  for (const k of Object.keys(o)) {
+    if (k !== "sort" && k !== "filter" && k !== "limit") return { ok: false };
+  }
+  const out: GetClientsArgs = {};
+  if (o.sort !== undefined) {
+    if (typeof o.sort !== "string" || !CLIENTS_SORTS.includes(o.sort as never)) {
+      return { ok: false };
+    }
+    out.sort = o.sort as GetClientsArgs["sort"];
+  }
+  if (o.filter !== undefined) {
+    if (typeof o.filter !== "object" || o.filter === null || Array.isArray(o.filter)) {
+      return { ok: false };
+    }
+    const f = o.filter as Record<string, unknown>;
+    for (const k of Object.keys(f)) {
+      if (k !== "hasActiveDeals" && k !== "minRevenue") return { ok: false };
+    }
+    out.filter = {};
+    if (f.hasActiveDeals !== undefined) {
+      if (typeof f.hasActiveDeals !== "boolean") return { ok: false };
+      out.filter.hasActiveDeals = f.hasActiveDeals;
+    }
+    if (f.minRevenue !== undefined) {
+      if (typeof f.minRevenue !== "boolean") return { ok: false };
+      out.filter.minRevenue = f.minRevenue;
+    }
+  }
+  if (o.limit !== undefined) {
+    if (typeof o.limit !== "number" || !Number.isInteger(o.limit) || o.limit < 0) {
+      return { ok: false };
+    }
+    out.limit = o.limit;
+  }
+  return { ok: true, args: out };
+}
+
+/**
+ * Canonical filter/sort/cap pipeline (T1–T8/T13), pure + testable: maps the
+ * tool's boolean filters onto the EXISTING ClientFilterState, then applies
+ * the canonical filterClients → sortClients → hard cap. No new business
+ * rules — the canonical helper has no inverse filters, so `false`/absent
+ * applies no narrowing rather than inventing one (§7/§8).
+ */
+export function runGetClientsPipeline(
+  args: GetClientsArgs,
+  allClients: Client[],
+): Client[] {
+  const state: ClientFilterState = {
+    health: "all",
+    minRevenue: args.filter?.minRevenue === true ? "gt0" : "",
+    active: args.filter?.hasActiveDeals === true ? "hasActive" : "all",
+    q: "",
+  };
+  const filtered = filterClients(allClients, state);
+  // Default sort "revenue" = the Clients page's own list ordering (§7).
+  const sorted = sortClients(filtered, args.sort ?? "revenue");
+  const effectiveLimit = Math.min(
+    CLIENTS_LIST_MAX_LIMIT,
+    args.limit ?? CLIENTS_LIST_DEFAULT_LIMIT,
+  );
+  return sorted.slice(0, effectiveLimit);
+}
+
+/**
+ * get_clients (2c-3B): bounded client list for the authenticated workspace.
+ * Two indexed reads (leads + profile), then computeClients and the canonical
+ * filterClients/sortClients helpers — the exact semantics the Clients page
+ * shows. Default sort "revenue"; default limit 10; hard cap 20;
+ * `returnedCount` = number returned, not the number matching the filter.
+ */
+export const toolGetClients = internalQuery({
+  args: { userId: v.id("users"), args: v.any() },
+  handler: async (
+    ctx,
+    { userId, args },
+  ): Promise<ToolOk<Record<string, unknown>[]> | ToolErr> => {
+    const parsed = parseGetClientsArgs(args);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        tool: "get_clients",
+        error: { code: "invalid_args", message: "Invalid arguments." },
+      };
+    }
+
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const profile = await ctx.db
+      .query("businessProfiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const rows = runGetClientsPipeline(
+      parsed.args,
+      computeClients(leads, profile?.products),
+    );
+    return {
+      ok: true,
+      tool: "get_clients",
+      data: rows.map(projectClientForCopilot),
+      returnedCount: rows.length,
+    };
   },
 });
 

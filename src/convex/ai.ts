@@ -35,7 +35,7 @@ export async function runCopilotTool(
   ctx: Pick<ActionCtx, "runQuery">,
   userId: Id<"users">,
   call: CopilotToolCall,
-): Promise<ToolOk<Record<string, unknown>> | ToolErr> {
+): Promise<ToolOk<unknown> | ToolErr> {
   switch (call.name) {
     case "get_deal": {
       const dealId = typeof call.args?.dealId === "string" ? call.args.dealId : "";
@@ -44,6 +44,12 @@ export async function runCopilotTool(
     case "get_client": {
       const clientKey = typeof call.args?.clientKey === "string" ? call.args.clientKey : "";
       return await ctx.runQuery(internal.assistant.toolGetClient, { userId, clientKey });
+    }
+    case "get_clients": {
+      return await ctx.runQuery(internal.assistant.toolGetClients, {
+        userId,
+        args: call.args ?? {},
+      });
     }
     default:
       return {
