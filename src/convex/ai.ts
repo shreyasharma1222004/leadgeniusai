@@ -563,6 +563,7 @@ const COPILOT_SYSTEM = [
   "• Ground every business claim in <workspace>. Distinguish verified data from your own general advice.",
   "• <retrieved_records> (when present) contains ACTUAL DealFlow records retrieved for this question — they are authoritative for record-level answers. Never invent a record, never state a field that isn't there, never claim a record exists if it wasn't retrieved.",
   "• If <retrieved_records> says the result is partial, say so when it matters (e.g. “showing the 12 most relevant of 19 matching deals”).",
+  "• Records marked \"recentlyDiscussed\" in <retrieved_records> are the ones this conversation already surfaced — when the user asks “which one”, “the first one”, “that client”, “compare them”, answer about THOSE records specifically.",
   "• NEVER invent metrics, leads, clients, deals, revenue figures, goals or activity that are not in <workspace> or <retrieved_records>.",
   "• If the data needed to answer is missing or too thin, say so plainly instead of guessing.",
   "• Use <history> to resolve follow-ups like “what about the pipeline?” or “which one is bigger?” — refer back to what was just discussed.",
@@ -640,6 +641,58 @@ function classifyRetrieval(
   return null;
 }
 
+/** Record type surfaced by each retrieval category (§2b-4 continuity). */
+const CATEGORY_TYPE: Record<RetrievalCategory, string> = {
+  deals_open: "deal",
+  deals_attention: "deal",
+  clients_top: "client",
+  leads_followup: "lead",
+  proposals_pending: "proposal",
+};
+
+/** Loose shape of a retrieved record — projections always carry id + name/title. */
+type RetrievedRecordShape = {
+  id?: unknown;
+  name?: unknown;
+  title?: unknown;
+  company?: unknown;
+};
+
+/**
+ * Recent-record continuity (§2b-4): of the records just retrieved, which were
+ * ALREADY surfaced in this conversation? Deterministic case-insensitive
+ * name/company matching over the bounded history — no entity resolution, no
+ * extra retrieval, no model call. Capped at 5 (newest-encountered first).
+ * Only records retrieved THIS request (already ownership-verified inside
+ * retrieveForCopilot) can ever be flagged, so a deleted or foreign record can
+ * never re-enter context — it simply isn't in the result set (§6/§7).
+ */
+function buildRecentEntityContext(
+  category: RetrievalCategory,
+  records: RetrievedRecordShape[],
+  history: { role: string; content: string }[],
+): Map<string, { type: string; name: string; company?: string }> {
+  const discussed = new Map<string, { type: string; name: string; company?: string }>();
+  const historyText = history.map((h) => h.content).join("\n").toLowerCase();
+  if (!historyText) return discussed;
+  const type = CATEGORY_TYPE[category];
+  for (const r of records) {
+    if (discussed.size >= 5) break;
+    const id = typeof r.id === "string" ? r.id : undefined;
+    const name =
+      typeof r.name === "string" ? r.name : typeof r.title === "string" ? r.title : undefined;
+    const company = typeof r.company === "string" ? r.company : undefined;
+    if (!id || !name || name.trim().length <= 2) continue;
+    const hit =
+      historyText.includes(name.toLowerCase()) ||
+      (company !== undefined &&
+        company.trim().length > 2 &&
+        historyText.includes(company.toLowerCase()));
+    if (hit) discussed.set(id, { type, name, company });
+  }
+  return discussed;
+}
+
 const RETRIEVAL_LABELS: Record<string, string> = {
   leads_followup: "leads ranked for follow-up (overdue follow-ups first, then quietest activity)",
   deals_open: "open deals by value",
@@ -658,6 +711,7 @@ function buildCopilotUserPrompt(d: {
     partial: boolean;
     records: unknown[];
   } | null;
+  discussed?: Map<string, { type: string; name: string; company?: string }>;
 }): string {
   const history = d.history
     .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 500)}`)
@@ -673,11 +727,22 @@ function buildCopilotUserPrompt(d: {
   ];
   if (d.retrieved && d.retrieved.records.length > 0) {
     const label = RETRIEVAL_LABELS[d.retrieved.category] ?? d.retrieved.category;
+    const discussed = d.discussed ?? new Map<string, { type: string; name: string; company?: string }>();
     lines.push(
       "",
       "<retrieved_records>",
       `${label} — showing ${d.retrieved.records.length} of ${d.retrieved.totalMatching} matching record${d.retrieved.totalMatching === 1 ? "" : "s"}${d.retrieved.partial ? " (PARTIAL — more records exist)" : ""}`,
-      ...d.retrieved.records.map((r) => JSON.stringify(r)),
+      ...(discussed.size > 0
+        ? [`Continuity: ${discussed.size} of these record${discussed.size === 1 ? " was" : "s were"} named earlier in this conversation and ${discussed.size === 1 ? "is" : "are"} marked "recentlyDiscussed" — prefer them for "which one", "the first one", "that client" style questions.`]
+        : []),
+      ...d.retrieved.records.map((r) =>
+        JSON.stringify(
+          typeof (r as RetrievedRecordShape).id === "string" &&
+            discussed.has((r as RetrievedRecordShape).id as string)
+            ? { ...(r as object), recentlyDiscussed: true }
+            : r,
+        ),
+      ),
       "</retrieved_records>",
     );
   }
@@ -760,6 +825,19 @@ export const copilotReply = action({
           limit: 12,
         })
       : null;
+    // §2b-4 — recent-record continuity: only for conversational follow-ups
+    // (inherited category). Explicit intent replaces the conversational
+    // context with the fresh retrieval instead (§3/§5). No extra queries or
+    // model calls — pure matching over data this request already has.
+    const explicitHere = explicitRetrievalCategory(cleanMessage.toLowerCase());
+    const discussed =
+      !explicitHere && retrieved && retrievalCategory
+        ? buildRecentEntityContext(
+            retrievalCategory,
+            retrieved.records as RetrievedRecordShape[],
+            trimmedHistory.map((m) => ({ role: m.role, content: m.content })),
+          )
+        : new Map<string, { type: string; name: string; company?: string }>();
 
     try {
       const res = await fetch(OPENAI_URL, {
@@ -783,6 +861,7 @@ export const copilotReply = action({
                 snapshot,
                 message: cleanMessage,
                 retrieved,
+                discussed,
               }),
             },
           ],

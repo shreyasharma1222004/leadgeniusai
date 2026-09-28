@@ -396,6 +396,7 @@ export const retrieveForCopilot = internalQuery({
           totalMatching: open.length,
           partial: open.length > rows.length,
           records: rows.map((l) => ({
+            id: l._id,
             name: dealTitle(l),
             stage: statusLabel(canonicalStatus(l.status)),
             value: l.dealValue,
@@ -420,6 +421,7 @@ export const retrieveForCopilot = internalQuery({
         totalMatching: flagged.length,
         partial: flagged.length > cap,
         records: flagged.slice(0, cap).map(({ lead, flags }) => ({
+          id: lead._id,
           name: dealTitle(lead),
           stage: statusLabel(canonicalStatus(lead.status)),
           value: lead.dealValue,
@@ -457,6 +459,7 @@ export const retrieveForCopilot = internalQuery({
         totalMatching: open.length,
         partial: open.length > rows.length,
         records: rows.map((l) => ({
+          id: l._id,
           name: l.name,
           company: l.company,
           stage: statusLabel(canonicalStatus(l.status)),
@@ -491,6 +494,7 @@ export const retrieveForCopilot = internalQuery({
         totalMatching: clients.length,
         partial: clients.length > rows.length,
         records: rows.map((c) => ({
+          id: c.key,
           name: c.name,
           contact: c.primaryLead.name,
           industry: c.industry,
@@ -527,6 +531,7 @@ export const retrieveForCopilot = internalQuery({
       totalMatching: pending.length,
       partial: pending.length > capped.length,
       records: capped.map((p) => ({
+        id: p._id,
         title: p.title,
         deal: dealName.get(p.dealId) ?? "Deal no longer exists",
         status: p.status,
