@@ -24,9 +24,15 @@ import {
   parseGetProposalsArgs,
   projectClientForCopilot,
   projectDealForCopilot,
+  projectFollowUpForCopilot,
   projectProposalForCopilot,
+  parseGetFollowupsArgs,
   runGetClientsPipeline,
   runGetProposalsPipeline,
+  bucketFollowUps,
+  sortFollowUpsForCopilot,
+  GET_FOLLOWUPS_DEFAULT_LIMIT,
+  GET_FOLLOWUPS_MAX_LIMIT,
 } from "./assistant";
 import { computeClients, filterClients, sortClients } from "../lib/clients";
 import { dealTitle } from "../lib/revenue";
@@ -807,5 +813,176 @@ describe("get_proposals: projection", () => {
     expect((toolBody.match(/withIndex\("by_user"/g) ?? []).length).toBe(2);
     expect((toolBody.match(/q\.eq\("userId", userId\)/g) ?? []).length).toBe(2);
     expect(toolBody).toContain("dealTitle(l)");
+  });
+});
+// ── Phase 2c-3D: get_followups ──────────────────────────────────────────────
+
+let fuSeq = 0;
+function makeFollowUp(overrides: Partial<Doc<"followUps">> = {}): Doc<"followUps"> {
+  fuSeq += 1;
+  const base: Record<string, unknown> = {
+    _id: "f57aj2m9vq3xs1pwnb5te068d0a1b2c" + String(fuSeq).padStart(3, "0"),
+    _creationTime: 1_700_000_000_000 + fuSeq,
+    userId: USER_A,
+    leadId: "k57aj2m9vq3xs1pwnb5te068d0a1b2001",
+    dueAt: 1_700_000_100_000 + fuSeq * 1000,
+    note: "Share the deck with " + fuSeq,
+    status: "pending",
+  };
+  return { ...base, ...overrides } as unknown as Doc<"followUps">;
+}
+
+const FOLLOWUP_KEY_SET = ["id", "leadId", "leadName", "note", "dueAt", "status", "completedAt"].sort();
+
+// Deterministic reference day: a fixed UTC-ish day rendered through the SAME
+// local endOfDay convention the canonical logic uses. NOW = noon; END = that
+// day's 23:59:59.999. Boundaries tested against NOW and END, never Date.now().
+const NOW = new Date(2026, 5, 15, 12, 0, 0, 0).getTime();
+const END = (() => { const d = new Date(2026, 5, 15, 12, 0, 0, 0); d.setHours(23, 59, 59, 999); return d.getTime(); })();
+
+function followupFixture() {
+  return [
+    makeFollowUp({ note: "Overdue A", dueAt: NOW - 86_400_000, status: "pending" }),
+    makeFollowUp({ note: "Overdue B", dueAt: NOW - 1, status: "pending" }),
+    makeFollowUp({ note: "Today edge start", dueAt: NOW, status: "pending" }),
+    makeFollowUp({ note: "Today edge end", dueAt: END, status: "pending" }),
+    makeFollowUp({ note: "Upcoming", dueAt: END + 1, status: "pending" }),
+    makeFollowUp({ note: "Far upcoming", dueAt: NOW + 7 * 86_400_000, status: "pending" }),
+    makeFollowUp({ note: "Done early", dueAt: NOW - 5_000, status: "done", completedAt: NOW - 6_000 }),
+    makeFollowUp({ note: "Done late", dueAt: END + 5_000, status: "done", completedAt: NOW - 2_000 }),
+  ];
+}
+
+describe("get_followups: argument parsing", () => {
+  test("T10 rejects non-object input", () => {
+    for (const bad of [null, undefined, 5, "x", [], true]) {
+      expect(parseGetFollowupsArgs(bad).ok).toBe(false);
+    }
+  });
+  test("T10 rejects invalid/wrong-typed bucket", () => {
+    for (const bad of ["Overdue", "later", 5, null, true]) {
+      expect(parseGetFollowupsArgs({ bucket: bad }).ok).toBe(false);
+    }
+  });
+  test("T10 rejects invalid limits", () => {
+    for (const bad of [-1, 1.5, "10", null, true]) {
+      expect(parseGetFollowupsArgs({ limit: bad }).ok).toBe(false);
+    }
+  });
+  test("T10 rejects unknown keys including userId", () => {
+    expect(parseGetFollowupsArgs({ userId: "x" }).ok).toBe(false);
+    expect(parseGetFollowupsArgs({ status: "overdue" }).ok).toBe(false);
+  });
+  test("accepts the full valid argument shape", () => {
+    expect(parseGetFollowupsArgs({ bucket: "today", limit: 5 }).ok).toBe(true);
+    expect(parseGetFollowupsArgs({}).ok).toBe(true);
+  });
+});
+
+describe("get_followups: bucket semantics (canonical, deterministic)", () => {
+  test("T2 overdue = pending with dueAt < now (both sides of the boundary)", () => {
+    const rows = bucketFollowUps("overdue", followupFixture(), NOW);
+    expect(rows.map((r) => r.note).sort()).toEqual(["Overdue A", "Overdue B"]);
+  });
+  test("T3/T16 today = pending in [now, endOfDay] — exact boundaries", () => {
+    const rows = bucketFollowUps("today", followupFixture(), NOW);
+    expect(rows.map((r) => r.note).sort()).toEqual(["Today edge end", "Today edge start"]);
+  });
+  test("T4/T16 upcoming = pending after endOfDay (END+1 is the first)", () => {
+    const rows = bucketFollowUps("upcoming", followupFixture(), NOW);
+    expect(rows.map((r) => r.note).sort()).toEqual(["Far upcoming", "Upcoming"]);
+    // The overdue→today and today→upcoming boundaries partition all pending
+    // rows with no overlap and no gap.
+    const all = followupFixture().filter((f) => f.status === "pending");
+    const o = bucketFollowUps("overdue", all, NOW).length;
+    const t = bucketFollowUps("today", all, NOW).length;
+    const u = bucketFollowUps("upcoming", all, NOW).length;
+    expect(o + t + u).toBe(all.length);
+  });
+  test("T5 done = completed rows regardless of dueAt", () => {
+    const rows = bucketFollowUps("done", followupFixture(), NOW);
+    expect(rows.map((r) => r.note).sort()).toEqual(["Done early", "Done late"]);
+    expect(rows.every((r) => r.status === "done")).toBe(true);
+  });
+  test("T6/T1 'all' and omitted bucket apply no narrowing (canonical default)", () => {
+    const all = followupFixture();
+    expect(bucketFollowUps("all", all, NOW).length).toBe(all.length);
+    expect(bucketFollowUps(undefined, all, NOW).length).toBe(all.length);
+  });
+  test("T17 mirrors the canonical followUps.stats classification", () => {
+    // Recompute the canonical stats counters over the fixture at NOW and
+    // compare totals with the tool buckets — no duplicated algorithm, just
+    // the same counts the Tasks page header shows.
+    const all = followupFixture();
+    const endOfDay = new Date(NOW);
+    endOfDay.setHours(23, 59, 59, 999);
+    const canonical = { overdue: 0, dueToday: 0, upcoming: 0, done: 0 };
+    for (const row of all) {
+      if (row.status === "done") canonical.done++;
+      else if (row.status === "pending") {
+        if (row.dueAt < NOW) canonical.overdue++;
+        else if (row.dueAt <= endOfDay.getTime()) canonical.dueToday++;
+        else canonical.upcoming++;
+      }
+    }
+    expect(bucketFollowUps("overdue", all, NOW).length).toBe(canonical.overdue);
+    expect(bucketFollowUps("today", all, NOW).length).toBe(canonical.dueToday);
+    expect(bucketFollowUps("upcoming", all, NOW).length).toBe(canonical.upcoming);
+    expect(bucketFollowUps("done", all, NOW).length).toBe(canonical.done);
+  });
+});
+
+describe("get_followups: ordering, limits, projection", () => {
+  test("T12 dueAt ASC regardless of insertion order", () => {
+    const rows = sortFollowUpsForCopilot(followupFixture());
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i - 1].dueAt).toBeLessThanOrEqual(rows[i].dueAt);
+    }
+  });
+  test("T7/T8/T9 limits: exact, hard-capped, zero", () => {
+    const all = sortFollowUpsForCopilot(followupFixture());
+    expect(all.slice(0, 2).length).toBe(2);
+    // Cap: 25 overdue rows, limit 1000 → 20.
+    const many = Array.from({ length: 25 }, (_, i) =>
+      makeFollowUp({ note: "O" + i, dueAt: NOW - (i + 1) * 1000 }),
+    );
+    const capped = sortFollowUpsForCopilot(bucketFollowUps("overdue", many, NOW)).slice(0, Math.min(GET_FOLLOWUPS_MAX_LIMIT, 1000));
+    expect(capped.length).toBe(GET_FOLLOWUPS_MAX_LIMIT);
+    expect(GET_FOLLOWUPS_MAX_LIMIT).toBe(20);
+    expect(GET_FOLLOWUPS_DEFAULT_LIMIT).toBe(10);
+    expect(bucketFollowUps("all", [], NOW).slice(0, Math.min(20, 0)).length).toBe(0);
+  });
+  test("T11 exact 7-field projection; forbidden fields absent", () => {
+    const p = projectFollowUpForCopilot(followupFixture()[0], "Dana Cole") as Record<string, unknown>;
+    expect(Object.keys(p).sort()).toEqual(FOLLOWUP_KEY_SET);
+    for (const forbidden of ["userId", "email", "rawLead", "messages", "campaign"]) {
+      expect(p).not.toHaveProperty(forbidden);
+    }
+  });
+  test("T15 note preserved verbatim; absent note stays absent", () => {
+    const srcFu = makeFollowUp();
+    const withNote = projectFollowUpForCopilot(srcFu, "D") as Record<string, unknown>;
+    expect(withNote.note).toBe(srcFu.note);
+    const noNote = projectFollowUpForCopilot(makeFollowUp({ note: undefined }), "D") as Record<string, unknown>;
+    expect(noNote.note).toBeUndefined();
+  });
+  test("T13 lead resolution: owned name, safe missing-lead drop, no foreign leak", () => {
+    // The production query drops rows whose leadId is absent from the
+    // caller's own lead map; a foreign leadId therefore never resolves.
+    const leadName = new Map([["k57aj2m9vq3xs1pwnb5te068d0a1b2001", "Dana Cole"]]);
+    const rows = followupFixture().filter((f) => leadName.has(f.leadId as string));
+    const projected = rows.map((f) => projectFollowUpForCopilot(f, leadName.get(f.leadId as string) ?? ""));
+    expect(projected.every((p) => (p as { leadName: string }).leadName === "Dana Cole")).toBe(true);
+    const foreignId = "ffffaj2m9vq3xs1pwnb5te068d0a1b2c";
+    expect(leadName.has(foreignId)).toBe(false); // foreign lead can never resolve
+  });
+  test("T14 workspace isolation: the tool's data path is by_user-scoped", () => {
+    const source = require("fs").readFileSync("src/convex/assistant.ts", "utf8");
+    const toolBody = source.slice(
+      source.indexOf("export const toolGetFollowups"),
+    );
+    expect((toolBody.match(/withIndex\("by_user/g) ?? []).length).toBe(2);
+    expect((toolBody.match(/q\.eq\("userId", userId\)/g) ?? []).length).toBe(2);
+    expect(toolBody).toContain("l.name");
   });
 });

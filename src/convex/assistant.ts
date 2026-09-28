@@ -1082,3 +1082,157 @@ export const toolGetClient = internalQuery({
     };
   },
 });
+
+// ── Phase 2c-3D: get_followups ─────────────────────────────────────────────
+//
+// Bounded follow-up LIST tool — the fifth and final initial read-only tool.
+// Bucket semantics REUSE the existing followUps.stats definitions exactly
+// (local endOfDay 23:59:59.999 boundary; overdue < now; today ≤ endOfDay;
+// upcoming > endOfDay; done = completed rows) — no new date model (§5/§6).
+// The reference time is captured ONCE per invocation and passed through the
+// pure pipeline so tests are deterministic. Follow-up rows whose lead no
+// longer exists are dropped, matching followUps.listForUser's established
+// safe behavior — a foreign lead can therefore never resolve to a name.
+
+export const GET_FOLLOWUPS_DEFAULT_LIMIT = 10;
+export const GET_FOLLOWUPS_MAX_LIMIT = 20;
+
+export type GetFollowupsArgs = {
+  bucket?: "overdue" | "today" | "upcoming" | "done" | "all";
+  limit?: number;
+};
+
+const FOLLOWUP_BUCKETS = ["overdue", "today", "upcoming", "done", "all"] as const;
+type FollowUpRow = Doc<"followUps">;
+
+/** Strict argument parsing (T10): known keys only, enum bucket, integer
+ *  limit ≥ 0. Default bucket "all" — the canonical unfiltered behavior. */
+export function parseGetFollowupsArgs(
+  raw: unknown,
+): { ok: true; args: GetFollowupsArgs } | { ok: false } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { ok: false };
+  const o = raw as Record<string, unknown>;
+  for (const k of Object.keys(o)) {
+    if (k !== "bucket" && k !== "limit") return { ok: false };
+  }
+  const out: GetFollowupsArgs = {};
+  if (o.bucket !== undefined) {
+    if (typeof o.bucket !== "string" || !FOLLOWUP_BUCKETS.includes(o.bucket as never)) {
+      return { ok: false };
+    }
+    out.bucket = o.bucket as GetFollowupsArgs["bucket"];
+  }
+  if (o.limit !== undefined) {
+    if (typeof o.limit !== "number" || !Number.isInteger(o.limit) || o.limit < 0) {
+      return { ok: false };
+    }
+    out.limit = o.limit;
+  }
+  return { ok: true, args: out };
+}
+
+/**
+ * Canonical bucket logic (T2–T6/T16), extracted pure with an explicit
+ * reference time: mirrors followUps.stats exactly — overdue < now;
+ * today ≤ local end-of-day; upcoming > end-of-day; done = status "done";
+ * "all"/absent applies no narrowing. One clock read per invocation.
+ */
+export function bucketFollowUps(
+  bucket: GetFollowupsArgs["bucket"] | undefined,
+  rows: FollowUpRow[],
+  now: number,
+): FollowUpRow[] {
+  const which = bucket ?? "all";
+  if (which === "all") return rows;
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+  const end = endOfDay.getTime();
+  if (which === "done") return rows.filter((f) => f.status === "done");
+  const pending = rows.filter((f) => f.status === "pending");
+  if (which === "overdue") return pending.filter((f) => f.dueAt < now);
+  if (which === "today") return pending.filter((f) => f.dueAt >= now && f.dueAt <= end);
+  return pending.filter((f) => f.dueAt > end); // upcoming
+}
+
+/**
+ * Approved get_followups projection (T11/T15): exactly the 7 contract
+ * fields. leadName is the lead record's own name field — no second naming
+ * algorithm. note preserved verbatim; no userId/emails/messages/campaigns.
+ */
+export function projectFollowUpForCopilot(
+  f: FollowUpRow,
+  leadName: string,
+): Record<string, unknown> {
+  return {
+    id: f._id,
+    leadId: f.leadId,
+    leadName,
+    note: f.note,
+    dueAt: f.dueAt,
+    status: f.status,
+    completedAt: f.completedAt,
+  };
+}
+
+/** Canonical ordering (T12): dueAt ASC — followUps.listForUser's own sort. */
+export function sortFollowUpsForCopilot(rows: FollowUpRow[]): FollowUpRow[] {
+  return [...rows].sort((a, b) => a.dueAt - b.dueAt);
+}
+
+/**
+ * get_followups (2c-3D): bounded follow-up list for the authenticated
+ * workspace. Two indexed reads (followUps by_user_due + the caller's own
+ * leads for one-pass name resolution — no N+1). Rows whose lead is missing
+ * are dropped (listForUser semantics). Default bucket "all",
+ * default limit 10, hard cap 20, dueAt ASC throughout.
+ */
+export const toolGetFollowups = internalQuery({
+  args: { userId: v.id("users"), args: v.any() },
+  handler: async (
+    ctx,
+    { userId, args },
+  ): Promise<ToolOk<Record<string, unknown>[]> | ToolErr> => {
+    const parsed = parseGetFollowupsArgs(args);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        tool: "get_followups",
+        error: { code: "invalid_args", message: "Invalid arguments." },
+      };
+    }
+
+    // One clock read per invocation (§6).
+    const now = Date.now();
+    const rows = await ctx.db
+      .query("followUps")
+      .withIndex("by_user_due", (q) => q.eq("userId", userId))
+      .collect();
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const leadName = new Map(leads.map((l) => [l._id as string, l.name]));
+
+    // Bucket → sort → cap through the pure canonical helpers. Rows whose
+    // lead no longer exists are dropped (listForUser semantics) — the lead
+    // map is built only from the caller's own leads, so a foreign leadId
+    // can never resolve to a name (§10/T13).
+    const filtered = bucketFollowUps(parsed.args.bucket, rows, now).filter(
+      (f) => leadName.has(f.leadId as string),
+    );
+    const sorted = sortFollowUpsForCopilot(filtered);
+    const effectiveLimit = Math.min(
+      GET_FOLLOWUPS_MAX_LIMIT,
+      parsed.args.limit ?? GET_FOLLOWUPS_DEFAULT_LIMIT,
+    );
+    const capped = sorted.slice(0, effectiveLimit);
+    return {
+      ok: true,
+      tool: "get_followups",
+      data: capped.map((f) =>
+        projectFollowUpForCopilot(f, leadName.get(f.leadId as string) ?? ""),
+      ),
+      returnedCount: capped.length,
+    };
+  },
+});
