@@ -573,14 +573,22 @@ const COPILOT_SYSTEM = [
 ].join("\n");
 
 /**
- * Deterministic server-side retrieval classification (§5/§10): maps the
+ * Deterministic server-side retrieval routing (§2b-2/§2b-3B): maps the
  * user's question to ONE retrieval category, or null when the compact
- * snapshot is sufficient (e.g. “what does my pipeline look like?”).
- * The model never chooses queries — this is plain keyword routing with
- * deliberate precedence (clients before attention so “which clients need
- * attention?” retrieves client records, not deals).
+ * snapshot is sufficient. The model never chooses queries — plain keyword
+ * routing with deliberate precedence (clients before attention so “which
+ * clients need attention?” retrieves client records, not deals).
  */
-function classifyRetrieval(q: string): "leads_followup" | "deals_open" | "deals_attention" | "clients_top" | "proposals_pending" | null {
+type RetrievalCategory =
+  | "leads_followup"
+  | "deals_open"
+  | "deals_attention"
+  | "clients_top"
+  | "proposals_pending";
+
+/** Category keywords in a SINGLE message — used for explicit intent AND for
+ *  recognizing the topic of a recent history turn (§2b-3B). */
+function explicitRetrievalCategory(q: string): RetrievalCategory | null {
   if (/\bproposal/.test(q)) return "proposals_pending";
   if (/\b(client|clients|customer|customers)\b/.test(q)) return "clients_top";
   if (/\b(at risk|risk|attention|stalled|stuck|flagged|close date passed|went cold)\b/.test(q)) {
@@ -596,6 +604,39 @@ function classifyRetrieval(q: string): "leads_followup" | "deals_open" | "deals_
   ) {
     return "deals_open";
   }
+  return null;
+}
+
+/**
+ * Conversational references (“which one”, “that client”, “tell me more”) that
+ * MAY inherit the retrieval topic from recent history (§2b-3B). Deliberately
+ * conservative: a question that matches none of these never scans history, so
+ * an unrelated question (“What is my revenue this month?”) can never inherit
+ * the previous topic (§4 false-carry-over guard).
+ */
+const CONVERSATIONAL_REFERENCE_RE =
+  /\b(which|what) (one|ones)\b|\b(that|this) one\b|\bthe other one\b|\bthose\b|\bthem\b|\bthat (client|customer|deal|proposal|lead)\b|\bthe (client|deal|proposal|lead)\b|\bwhat about (it|them|that|this|the other)\b|\btell me more\b|\bcompare (them|both|the two)\b|\bhow about the other\b|\bthe (first|second|third|last) one\b|\bwhich is (bigger|larger|smaller|worth more|cheaper)\b/;
+
+/**
+ * Context-aware routing: (1) explicit intent in the CURRENT message always
+ * wins; (2) only anaphoric questions may inherit; (3) the inherited category
+ * is the MOST RECENT history turn carrying an explicit category keyword —
+ * typically the user's previous question. History is the already-bounded
+ * window the Copilot request fetched anyway; no extra database work, no extra
+ * model call, and conversation text can never influence userId or scope.
+ */
+function classifyRetrieval(
+  message: string,
+  history: { role: string; content: string }[] = [],
+): RetrievalCategory | null {
+  const explicit = explicitRetrievalCategory(message);
+  if (explicit) return explicit;
+  if (!CONVERSATIONAL_REFERENCE_RE.test(message)) return null;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const inherited = explicitRetrievalCategory(history[i].content.toLowerCase());
+    if (inherited) return inherited;
+  }
+  // Nothing to inherit from → snapshot-only path rather than guessing.
   return null;
 }
 
@@ -706,7 +747,12 @@ export const copilotReply = action({
     });
     // §10 — retrieval only when the question needs record-level data. One
     // bounded internalQuery for the classified category; null ⇒ snapshot only.
-    const retrievalCategory = classifyRetrieval(cleanMessage.toLowerCase());
+    // §2b-3B — classification is context-aware: current message first, then
+    // the ALREADY-FETCHED bounded history (no extra queries, no model calls).
+    const retrievalCategory = classifyRetrieval(
+      cleanMessage.toLowerCase(),
+      trimmedHistory.map((m) => ({ role: m.role, content: m.content })),
+    );
     const retrieved = retrievalCategory
       ? await ctx.runQuery(internal.assistant.retrieveForCopilot, {
           userId,
