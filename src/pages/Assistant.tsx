@@ -2,14 +2,20 @@ import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
-import { askAssistant, type CopilotContext } from "@/lib/assistant";
+import type { Id } from "@/convex/_generated/dataModel";
+import {
+  askAssistant,
+  type AssistantHistoryTurn,
+  type CopilotContext,
+} from "@/lib/assistant";
 import { computeClients } from "@/lib/clients";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { useQuery } from "convex/react";
-import { ArrowRight, Bot, Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { ArrowRight, Bot, MessageSquarePlus, Sparkles, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
+import { toast } from "sonner";
 
 interface Turn {
   role: "user" | "assistant";
@@ -29,6 +35,24 @@ const SUGGESTIONS = [
   "What is blocking my growth?",
 ];
 
+const DEFAULT_TITLE = "New conversation";
+
+/** Deterministic, bounded local title from the first user message (§3). */
+function deriveTitle(firstMessage: string): string {
+  const words = firstMessage.trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
+  const stop = new Set([
+    "what", "which", "who", "whats", "what's", "is", "are", "the", "a", "an",
+    "my", "i", "do", "does", "should", "can", "how", "to", "of", "for", "on",
+    "in", "me", "any", "there",
+  ]);
+  const keys = words
+    .filter((w) => !stop.has(w.toLowerCase()))
+    .slice(0, 3)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  const title = keys.join(" ").slice(0, 60);
+  return title || DEFAULT_TITLE;
+}
+
 export default function AssistantPage() {
   useAuth();
   const leads = useQuery(api.leads.list, {});
@@ -38,7 +62,39 @@ export default function AssistantPage() {
   const profile = useQuery(api.business.myProfile, {});
   const goals = useQuery(api.business.goalsWithProgress, {});
   const proposals = useQuery(api.proposals.list, {});
+  const conversations = useQuery(api.assistant.listConversations, {});
   const { user } = useAuth();
+
+  const createConversation = useMutation(api.assistant.createConversation);
+  const addMessageMutation = useMutation(api.assistant.addMessage);
+  const renameConversationMutation = useMutation(api.assistant.renameConversation);
+  const deleteConversationMutation = useMutation(api.assistant.deleteConversation);
+
+  const [activeId, setActiveId] = useState<Id<"conversations"> | null>(null);
+  const [input, setInput] = useState("");
+  const [thinking, setThinking] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+
+  // Auto-select the most recent conversation once the list loads (§4).
+  useEffect(() => {
+    if (conversations === undefined) return;
+    if (activeId !== null && conversations.some((c) => c._id === activeId)) return;
+    setActiveId(conversations[0]?._id ?? null);
+  }, [conversations, activeId]);
+
+  // One subscription per active conversation — reused for rendering AND the
+  // follow-up history window; no duplicate message subscriptions.
+  const activeMessages = useQuery(
+    api.assistant.listMessages,
+    activeId ? { conversationId: activeId } : "skip",
+  );
+
+  const ready =
+    leads !== undefined &&
+    messages !== undefined &&
+    followUps !== undefined &&
+    campaigns !== undefined &&
+    conversations !== undefined;
 
   const growthGoalLabel =
     user?.growthGoal === "find-customers"
@@ -55,16 +111,8 @@ export default function AssistantPage() {
                 ? "improve operations"
                 : undefined;
 
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [input, setInput] = useState("");
-  const [thinking, setThinking] = useState(false);
-
-  const ready =
-    leads !== undefined && messages !== undefined && followUps !== undefined && campaigns !== undefined;
-
-  // Business context (Phase 1 §7) — profile + goals feed the Copilot so its
-  // answers use what the business sells, who it targets, and real goal math.
-  // Phase 2 (§20) adds revenue context: derived clients + persisted proposals.
+  // Business context (Phase 1 §7 + Phase 2 §20) — unchanged from the audited
+  // implementation; the deterministic engine consumes it exactly as before.
   const context: CopilotContext | undefined =
     profile !== undefined && proposals !== undefined
       ? {
@@ -104,21 +152,87 @@ export default function AssistantPage() {
         }
       : undefined;
 
-  const ask = (question: string) => {
-    if (!question.trim() || !ready) return;
-    const answer = askAssistant(question, leads, messages, followUps, campaigns, context);
-    setTurns((prev) => [
-      ...prev,
-      { role: "user", text: question },
-      {
+  // Bounded recent history for follow-up resolution (§5) — the same persisted
+  // messages the view renders, no extra subscription, capped by the engine.
+  const history: AssistantHistoryTurn[] = useMemo(
+    () =>
+      (activeMessages ?? []).slice(-8).map((m) => ({
+        role: m.role,
+        text: m.content,
+      })),
+    [activeMessages],
+  );
+
+  const handleNewConversation = async () => {
+    try {
+      const id = await createConversation({});
+      setActiveId(id);
+      setSendError(null);
+    } catch {
+      toast.error("Couldn't create the conversation — try again.");
+    }
+  };
+
+  const handleDeleteConversation = async (id: Id<"conversations">) => {
+    try {
+      await deleteConversationMutation({ id });
+      toast("Conversation deleted.");
+      if (activeId === id) setActiveId(null);
+    } catch {
+      toast.error("Couldn't delete the conversation — try again.");
+    }
+  };
+
+  const ask = async (question: string) => {
+    const trimmed = question.trim();
+    if (!trimmed || !ready) return;
+    setThinking(true);
+    setSendError(null);
+    try {
+      // 1. Ensure an active conversation exists.
+      let convId = activeId;
+      if (!convId) {
+        convId = await createConversation({});
+        setActiveId(convId);
+      }
+      // 2. Persist the user message FIRST (a failure here must not fake an
+      //    assistant answer — the error state shows and nothing is saved).
+      await addMessageMutation({ conversationId: convId, role: "user", content: trimmed });
+      // 3. First message also titles the conversation (deterministic, local).
+      const conv = (conversations ?? []).find((c) => c._id === convId);
+      if (conv && conv.title === DEFAULT_TITLE) {
+        await renameConversationMutation({ id: convId, title: deriveTitle(trimmed) });
+      }
+      // 4. Deterministic answer — ZERO AI calls (§7). The engine receives the
+      //    bounded recent history for follow-up resolution.
+      const priorTurns: AssistantHistoryTurn[] = [
+        ...history,
+        { role: "user" as const, text: trimmed },
+      ];
+      const answer = askAssistant(
+        trimmed,
+        leads,
+        messages,
+        followUps,
+        campaigns,
+        context,
+        priorTurns,
+      );
+      // 5. Persist the assistant answer, then the reactive subscription
+      //    renders both turns from the server (no optimistic duplicates).
+      await addMessageMutation({
+        conversationId: convId,
         role: "assistant",
-        text: answer.text,
-        bullets: answer.bullets,
-        leadIds: answer.leadIds,
-      },
-    ]);
-    setInput("");
-    setThinking(false);
+        content: [answer.text, ...answer.bullets.map((b) => `• ${b}`)].join("\n"),
+      });
+      setInput("");
+    } catch {
+      setSendError(
+        "Your message couldn't be saved — it was NOT added to this conversation. Nothing was lost from your workspace; try sending again.",
+      );
+    } finally {
+      setThinking(false);
+    }
   };
 
   const nameById = useMemo(
@@ -130,6 +244,7 @@ export default function AssistantPage() {
     <AppShell title="AI Copilot">
       <p className="-mt-3 mb-4 text-sm text-muted-foreground">
         Your business copilot — answers from your real workspace data, never invented numbers.
+        Conversations are saved to your workspace.
       </p>
 
       {!ready ? (
@@ -139,116 +254,196 @@ export default function AssistantPage() {
           ))}
         </div>
       ) : (
-        <>
-          <div className="flex flex-col gap-3">
-            {turns.length === 0 && (
-              <div className="rounded-lg border border-border bg-card p-5">
-                <div className="flex items-center gap-2">
-                  <span className="flex size-8 items-center justify-center rounded-full border border-border bg-secondary text-foreground">
-                    <Bot className="size-4" />
-                  </span>
-                  <p className="text-sm font-semibold">Your pipeline, on demand.</p>
-                </div>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  I read your leads, deals, replies, follow-ups and campaigns — ask me anything about
-                  them. Every answer is computed from your own workspace.
-                </p>
-              </div>
+        <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+          {/* ── Conversation list — lightweight, no animation (§4) ────────── */}
+          <aside className="h-fit rounded-xl border border-border bg-card p-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="mb-2 w-full justify-start"
+              onClick={() => void handleNewConversation()}
+            >
+              <MessageSquarePlus className="size-4" /> New conversation
+            </Button>
+            {conversations.length === 0 ? (
+              <p className="px-2 py-3 text-xs text-muted-foreground">
+                No conversations yet — start one below.
+              </p>
+            ) : (
+              <ul className="space-y-0.5">
+                {conversations.map((c) => (
+                  <li key={c._id} className="group flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveId(c._id);
+                        setSendError(null);
+                      }}
+                      className={cn(
+                        "min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                        activeId === c._id
+                          ? "bg-[#e4ddcf] font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                      )}
+                    >
+                      {c.title}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${c.title}`}
+                      onClick={() => void handleDeleteConversation(c._id)}
+                      className="rounded p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-secondary hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
+          </aside>
 
-            {turns.map((turn, i) => (
-              <div key={i} className={cn("flex", turn.role === "user" ? "justify-end" : "justify-start")}>
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed sm:max-w-[75%]",
-                    turn.role === "user"
-                      ? "border border-[#171613]/30 bg-[#e4ddcf]"
-                      : "ai-gradient-border rounded-lg",
+          {/* ── Active conversation ────────────────────────────────────────── */}
+          <div>
+            {activeMessages === undefined && activeId !== null ? (
+              <div className="space-y-3">
+                <div className="h-16 animate-pulse rounded-lg bg-card" />
+                <div className="h-16 w-5/6 animate-pulse rounded-lg bg-card" />
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-3">
+                  {(activeMessages ?? []).length === 0 && (
+                    <div className="rounded-lg border border-border bg-card p-5">
+                      <div className="flex items-center gap-2">
+                        <span className="flex size-8 items-center justify-center rounded-full border border-border bg-secondary text-foreground">
+                          <Bot className="size-4" />
+                        </span>
+                        <p className="text-sm font-semibold">Your pipeline, on demand.</p>
+                      </div>
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                        I read your leads, deals, replies, follow-ups and campaigns — ask me
+                        anything about them. Every answer is computed from your own workspace.
+                      </p>
+                    </div>
                   )}
-                >
-                  {turn.role === "assistant" && (
-                    <p className="label-caps mb-1.5 flex items-center gap-1.5 text-muted-foreground">
-                      <Sparkles className="size-3" /> Dealflow AI
-                    </p>
-                  )}
-                  <p className="whitespace-pre-wrap">{turn.text}</p>
-                  {turn.bullets && turn.bullets.length > 0 && (
-                    <ul className="mt-2 space-y-1">
-                      {turn.bullets.map((b, bi) => (
-                        <li key={bi} className="flex gap-2 text-[13px]">
-                          <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#9a9285]" />
-                          {b}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {turn.leadIds && turn.leadIds.length > 0 && (
-                    <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      {turn.leadIds.map((id) => {
-                        const lead = nameById.get(id);
-                        if (!lead) return null;
-                        return (
-                          <Link
-                            key={id}
-                            to={`/leads/${id}`}
-                            className="rounded-full border border-border bg-card px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-[#b3a894] hover:text-foreground"
-                          >
-                            {lead.name} →
-                          </Link>
-                        );
-                      })}
+
+                  {(activeMessages ?? []).map((m) => {
+                    const lines = m.content.split("\n");
+                    const text = lines[0] ?? m.content;
+                    const bullets = lines
+                      .slice(1)
+                      .map((l) => l.replace(/^•\s*/, ""))
+                      .filter(Boolean);
+                    // Lead chips resolve from the message text against real
+                    // records — same behavior as the previous in-memory chips.
+                    const leadIds = (leads ?? [])
+                      .filter((l) => m.role === "assistant" && m.content.includes(l.name))
+                      .slice(0, 5)
+                      .map((l) => l._id as string);
+                    return (
+                      <div
+                        key={m._id}
+                        className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
+                      >
+                        <div
+                          className={cn(
+                            "max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed sm:max-w-[75%]",
+                            m.role === "user"
+                              ? "border border-[#171613]/30 bg-[#e4ddcf]"
+                              : "ai-gradient-border rounded-lg",
+                          )}
+                        >
+                          {m.role === "assistant" && (
+                            <p className="label-caps mb-1.5 flex items-center gap-1.5 text-muted-foreground">
+                              <Sparkles className="size-3" /> Dealflow AI
+                            </p>
+                          )}
+                          <p className="whitespace-pre-wrap">{text}</p>
+                          {bullets.length > 0 && (
+                            <ul className="mt-2 space-y-1">
+                              {bullets.map((b, bi) => (
+                                <li key={bi} className="flex gap-2 text-[13px]">
+                                  <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#9a9285]" />
+                                  {b}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {leadIds.length > 0 && (
+                            <div className="mt-2.5 flex flex-wrap gap-1.5">
+                              {leadIds.map((id) => {
+                                const lead = nameById.get(id);
+                                if (!lead) return null;
+                                return (
+                                  <Link
+                                    key={id}
+                                    to={`/leads/${id}`}
+                                    className="rounded-full border border-border bg-card px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-[#b3a894] hover:text-foreground"
+                                  >
+                                    {lead.name} →
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {thinking && (
+                    <div className="flex justify-start">
+                      <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+                        <span className="animate-pulse">Reading your workspace…</span>
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
 
-            {thinking && (
-              <div className="flex justify-start">
-                <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
-                  <span className="animate-pulse">Reading your workspace…</span>
-                </div>
-              </div>
+                {sendError && (
+                  <p className="mt-3 rounded-md border border-[#a8442f]/40 bg-[#a8442f]/[0.08] px-3 py-2 text-xs leading-relaxed text-[#a8442f]">
+                    {sendError}
+                  </p>
+                )}
+
+                {/* Suggestions — only on an empty conversation */}
+                {(activeMessages ?? []).length === 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {SUGGESTIONS.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => void ask(s)}
+                        className="cursor-pointer rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[#b3a894] hover:text-foreground"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input */}
+                <form
+                  className="sticky bottom-4 mt-4 flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void ask(input);
+                  }}
+                >
+                  <Input
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Ask about deals, revenue, clients, proposals…"
+                    aria-label="Ask the assistant"
+                  />
+                  <Button type="submit" size="icon" disabled={!input.trim() || thinking} aria-label="Send question">
+                    <ArrowRight className="size-4" />
+                  </Button>
+                </form>
+              </>
             )}
           </div>
-
-          {/* Suggestions */}
-          {turns.length === 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => ask(s)}
-                  className="cursor-pointer rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[#b3a894] hover:text-foreground"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Input */}
-          <form
-            className="sticky bottom-4 mt-4 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setThinking(true);
-              // small delay so the "thinking" state renders before the answer
-              setTimeout(() => ask(input), 250);
-            }}
-          >
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about deals, revenue, clients, proposals…"
-              aria-label="Ask the assistant"
-            />
-            <Button type="submit" size="icon" disabled={!input.trim() || !ready} aria-label="Send question">
-              <ArrowRight className="size-4" />
-            </Button>
-          </form>
-        </>
+        </div>
       )}
     </AppShell>
   );

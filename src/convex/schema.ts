@@ -286,6 +286,36 @@ const schema = defineSchema(
       manualCurrentValue: v.optional(v.number()),
       createdAt: v.number(),
     }).index("by_user", ["userId"]),
+
+    /**
+     * Phase 3 (§2a): Copilot conversations — persistence ONLY. No AI calls
+     * anywhere in this flow; answers come from the deterministic engine in
+     * src/lib/assistant.ts. Titles are user-derivable strings (default
+     * "New conversation" or derived locally from the first user message).
+     * Owned by userId like every other table.
+     */
+    conversations: defineTable({
+      userId: v.id("users"),
+      title: v.string(),
+      createdAt: v.number(),
+      updatedAt: v.number(), // bumped on every appended message
+    }).index("by_user", ["userId"]),
+
+    /**
+     * Phase 3 (§2a): one Copilot chat turn. `role` is constrained to
+     * user|assistant at the validator level. `userId` is stored on every row
+     * so a guessed conversationId can never grant access — every read/write
+     * re-verifies ownership through the parent conversation AND the rows stay
+     * user-stamped for defense in depth.
+     */
+    conversationMessages: defineTable({
+      conversationId: v.id("conversations"),
+      userId: v.id("users"),
+      // "user" | "assistant" (validator-enforced union)
+      role: v.union(v.literal("user"), v.literal("assistant")),
+      content: v.string(),
+      createdAt: v.number(),
+    }).index("by_conversation", ["conversationId", "createdAt"]),
   },
   {
     schemaValidation: false,

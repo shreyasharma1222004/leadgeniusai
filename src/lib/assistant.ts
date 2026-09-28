@@ -1,7 +1,7 @@
 import type { Doc } from "@/convex/_generated/dataModel";
 import { LEAD_STATUS_LABELS, type LeadStatus } from "@/lib/leadStatus";
 import { timeAgo } from "@/lib/format";
-import { money } from "@/lib/growth";
+import { money, statusLabelOf } from "@/lib/growth";
 import {
   computeClosedStats,
   computePipelineStats,
@@ -64,6 +64,20 @@ export interface CopilotContext {
  * Rule-based assistant brain. Answers real questions from the workspace data —
  * no fabricated facts, every claim is backed by the numbers it computed.
  */
+/** One prior chat turn, for resolving short follow-up questions (Phase 3 §2a). */
+export interface AssistantHistoryTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+/** The engine never sees more than this many recent turns. */
+const HISTORY_LIMIT = 8;
+
+/** Strictly anaphoric questions ("which one", "of those", "bigger?") — never
+ *  fresh queries like "which deals need attention", which must recompute. */
+const FOLLOWUP_RE =
+  /\b(which|what) (one|ones)\b|\bwhich of (them|these|those)\b|\bof (them|those|these)\b|^(them|those|these|it|they|both)\b|^(bigger|larger|smaller|biggest|largest|smallest)\b|\bthe (first|second|last) one\b/;
+
 export function askAssistant(
   question: string,
   leads: Lead[],
@@ -71,8 +85,58 @@ export function askAssistant(
   followUps: FollowUpRow[],
   campaigns: CampaignRow[],
   context?: CopilotContext,
+  history: AssistantHistoryTurn[] = [],
 ): AssistantReply {
   const q = question.toLowerCase().trim();
+
+  // ── Follow-up resolution (§2a, deterministic only) ────────────────────
+  // A short anaphoric question ("which one is bigger?") inherits its
+  // antecedent from the most recent assistant turn that named real deals.
+  // Candidates are matched by exact lead name or company — no invented
+  // context. When nothing matches, the question falls through to the normal
+  // intents and, failing those, the existing fallback.
+  const recentHistory = history.slice(-HISTORY_LIMIT);
+  const lastAssistantTurn = [...recentHistory].reverse().find((t) => t.role === "assistant");
+  if (lastAssistantTurn && FOLLOWUP_RE.test(q)) {
+    const mentioned = leads.filter((l) => {
+      const name = l.name.trim();
+      const company = l.company?.trim();
+      return (
+        (name.length > 2 && lastAssistantTurn.text.includes(name)) ||
+        (company !== undefined && company.length > 2 && lastAssistantTurn.text.includes(company))
+      );
+    });
+    if (mentioned.length > 0) {
+      const fmt = (l: Lead) =>
+        `${dealTitle(l)} — ${l.dealValue !== undefined ? money(l.dealValue, context?.workspaceCurrency) : "no value set"} · ${statusLabelOf(l.status)}`;
+      const ranked = [...mentioned].sort((a, b) => (b.dealValue ?? 0) - (a.dealValue ?? 0));
+      if (/\b(bigger|larger|smaller|biggest|largest|smallest|most|highest|best|valuable)\b/.test(q)) {
+        const top = ranked[0];
+        return {
+          intent: "followup",
+          text:
+            ranked.length > 1
+              ? `Of the deals we just discussed, ${dealTitle(top)} is the largest:`
+              : "The deal we just discussed:",
+          bullets: [
+            fmt(top),
+            ...(ranked.length > 1
+              ? [`The others: ${ranked.slice(1).map((l) => `${dealTitle(l)} (${l.dealValue !== undefined ? money(l.dealValue, context?.workspaceCurrency) : "no value set"})}`).join("; ")}`]
+              : []),
+          ],
+          leadIds: ranked.map((l) => l._id),
+        };
+      }
+      return {
+        intent: "followup",
+        text: "From the deals we just discussed:",
+        bullets: ranked.map(fmt),
+        leadIds: ranked.map((l) => l._id),
+      };
+    }
+    // No recognizable antecedent → fall through to the normal intents rather
+    // than guessing what "one" refers to.
+  }
 
   const leadIds = (list: Lead[]) => list.slice(0, 8).map((l) => l._id);
 
