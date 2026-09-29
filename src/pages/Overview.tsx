@@ -94,63 +94,24 @@ export default function OverviewPage() {
   const [briefError, setBriefError] = useState<string | null>(null);
   const [planDismissed, setPlanDismissed] = useState<Set<string>>(new Set());
 
-  const ready =
-    leads !== undefined &&
-    messages !== undefined &&
-    followUps !== undefined &&
-    campaigns !== undefined &&
-    proposals !== undefined &&
-    history !== undefined;
-
-  const first = (user?.name ?? "there").split(" ")[0];
-
-  if (!ready) {
-    return (
-      <AppShell title="Dashboard">
-        <div className="space-y-10">
-          <Skeleton className="h-24 w-2/3" />
-          <div className="grid gap-8 lg:grid-cols-3">
-            <Skeleton className="h-64 lg:col-span-2" />
-            <Skeleton className="h-64" />
-          </div>
-        </div>
-      </AppShell>
-    );
-  }
-
-  const now = Date.now();
-
-  // ── Intelligence layer (pure functions over real records) ─────────────────
-  const metrics = computeGrowthMetrics(
-    leads,
-    messages,
-    followUps as FollowUpRow[],
-    campaigns,
-  );
+  // Hooks must run unconditionally on every render — including the loading
+  // render below. These three memos used to sit after the early return, so
+  // the hook count grew once data arrived ("Rendered more hooks than during
+  // the previous render").
   const workspaceCurrency = profile?.currency ?? undefined;
-  const brief = computeGrowthBrief(metrics, leads, workspaceCurrency);
-  const opportunities = computeOpportunities(metrics, leads, followUps as FollowUpRow[]);
-  const plan = computeTodayPlan(metrics, leads, followUps as FollowUpRow[], workspaceCurrency);
-
-  // ── Phase 2: revenue snapshot (§21) — same revenue source of truth ──
-  const closedStats = computeClosedStats(leads);
-  const pipelineStats = computePipelineStats(leads);
-  const stageLastAt = useMemo(() => stageLastAtMap(history), [history]);
-  const pendingProposals = (proposals ?? []).filter(
-    (p) => p.status === "sent" || p.status === "viewed",
-  ).length;
-  const clients = useMemo(
-    () => computeClients(leads, profile?.products, { followUps, messages }),
-    [leads, profile?.products, followUps, messages],
-  );
-  const healthyClients = clients.filter((c) => c.health.state === "healthy").length;
 
   // ── Phase 2: today's revenue priorities (§22) — evidence-backed, why-labeled ──
+  const stageLastAt = useMemo(() => stageLastAtMap(history ?? []), [history]);
+  const clients = useMemo(
+    () => computeClients(leads ?? [], profile?.products, { followUps, messages }),
+    [leads, profile?.products, followUps, messages],
+  );
   const revenuePriorities = useMemo(() => {
     const out: { id: string; title: string; why: string; to: string; kind: string }[] = [];
     const now = Date.now();
+    const leadRows = leads ?? [];
     // 1. Close-date passed / stalled high-value deals
-    const flagged = leads
+    const flagged = leadRows
       .filter((l) => l.status !== "won" && l.status !== "lost")
       .map((l) => ({ lead: l, flags: dealFlags(l, { now, lastStageAt: stageLastAt.get(l._id as string), proposalPending: (proposals ?? []).some((p) => p.dealId === l._id && (p.status === "sent" || p.status === "viewed")) }) }))
       .filter((f) => f.flags.length > 0)
@@ -189,7 +150,7 @@ export default function OverviewPage() {
       });
     }
     // 4. Deals closing within 14 days (opportunity push)
-    const closingSoon = leads
+    const closingSoon = leadRows
       .filter(
         (l) =>
           l.status !== "won" &&
@@ -212,6 +173,51 @@ export default function OverviewPage() {
     }
     return out.slice(0, 4);
   }, [leads, proposals, clients, stageLastAt, workspaceCurrency]);
+
+  const ready =
+    leads !== undefined &&
+    messages !== undefined &&
+    followUps !== undefined &&
+    campaigns !== undefined &&
+    proposals !== undefined &&
+    history !== undefined;
+
+  const first = (user?.name ?? "there").split(" ")[0];
+
+  if (!ready) {
+    return (
+      <AppShell title="Dashboard">
+        <div className="space-y-10">
+          <Skeleton className="h-24 w-2/3" />
+          <div className="grid gap-8 lg:grid-cols-3">
+            <Skeleton className="h-64 lg:col-span-2" />
+            <Skeleton className="h-64" />
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const now = Date.now();
+
+  // ── Intelligence layer (pure functions over real records) ─────────────────
+  const metrics = computeGrowthMetrics(
+    leads,
+    messages,
+    followUps as FollowUpRow[],
+    campaigns,
+  );
+  const brief = computeGrowthBrief(metrics, leads, workspaceCurrency);
+  const opportunities = computeOpportunities(metrics, leads, followUps as FollowUpRow[]);
+  const plan = computeTodayPlan(metrics, leads, followUps as FollowUpRow[], workspaceCurrency);
+
+  // ── Phase 2: revenue snapshot (§21) — same revenue source of truth ──
+  const closedStats = computeClosedStats(leads);
+  const pipelineStats = computePipelineStats(leads);
+  const pendingProposals = (proposals ?? []).filter(
+    (p) => p.status === "sent" || p.status === "viewed",
+  ).length;
+  const healthyClients = clients.filter((c) => c.health.state === "healthy").length;
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
