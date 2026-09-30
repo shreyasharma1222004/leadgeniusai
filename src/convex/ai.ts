@@ -8,9 +8,12 @@ import type { Id } from "./_generated/dataModel";
 import type { ToolErr, ToolOk } from "./assistant";
 
 /**
- * Server-side lead analysis (OpenAI).
+ * Server-side AI actions. The shared chat-completions URL constant serves
+ * OpenAI (lead analysis, business brief, proposal assist); the Copilot
+ * streaming path points at xAI Grok.
  *
- * The API key lives ONLY in Convex environment variables (OPENAI_API_KEY) and
+ * API keys live ONLY in Convex environment variables (OPENAI_API_KEY /
+ * XAI_API_KEY) and
  * is read here at request time — it is never compiled into the frontend
  * bundle. If the key is missing or the call fails, the action returns null
  * and the client falls back to the deterministic heuristic estimator, so the
@@ -18,6 +21,10 @@ import type { ToolErr, ToolOk } from "./assistant";
  */
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+// xAI Grok endpoint for the Copilot streaming path (same wire format:
+// chat-completions request shape, SSE streaming, native tool calling).
+const XAI_URL = "https://api.x.ai/v1/chat/completions";
+const COPILOT_MODEL = "grok-4.7";
 
 // ── Copilot tool dispatcher (Phase 2c-2) ───────────────────────────────────
 //
@@ -31,10 +38,10 @@ const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 
 export type CopilotToolCall = { name: string; args: Record<string, unknown> };
 
-// ── Native OpenAI tool-calling (Phase 2c-4A) ────────────────────────────────
+// ── Native tool-calling (Phase 2c-4A) ────────────────────────────────
 //
 // The five tested read-only tools are now exposed to the model through
-// native OpenAI tool definitions. The JSON schemas are a CONVENIENCE for the
+// native tool definitions. The JSON schemas are a CONVENIENCE for the
 // model — they are NOT a security boundary. Every tool call still flows
 // through parseNormalizedToolCall (strict parsing), detectSingleToolCall
 // (one-call limit), and runCopilotTool (the fixed whitelist dispatcher,
@@ -260,7 +267,7 @@ function toolCallNotice(kind: "invalid" | "too_many"): string {
 // straight-line plan: first request → (normal text | one tool → dispatcher →
 // continuation) → finish.
 
-/** OpenAI chat message (assistant tool-call turn + tool result turn). */
+/** Chat message (assistant tool-call turn + tool result turn). */
 export type ChatMessage =
   | { role: "assistant"; content: string | null; tool_calls: unknown[] }
   | { role: "tool"; tool_call_id: string; content: string };
@@ -316,7 +323,7 @@ export async function persistNonContentAssistantTurn(
 }
 
 /**
- * Merge streamed tool-call deltas by `index` (2c-4B): OpenAI streams ONE
+ * Merge streamed tool-call deltas by `index` (2c-4B): providers stream ONE
  * logical call as several partial chunks ({index:0, id, function:{name,
  * arguments:"…"}}, {index:0, function:{arguments:"…more"}}), so raw chunks
  * must never be counted directly (a single call would misclassify as
@@ -391,7 +398,7 @@ export function buildToolResultPayload(result: unknown): ToolResultPayload {
 
 /**
  * Continuation messages (2c-4B §5): the assistant tool-call turn + the tool
- * result turn, in the native OpenAI chat-completions structure. The tool
+ * result turn, in the native chat-completions structure. The tool
  * result is DATA, not instructions (§4): serialized from the bounded
  * projection, wrapped in <tool_result> data markers, size-capped, with an
  * explicit prefix stating the data/instruction boundary. No userId anywhere
@@ -1242,7 +1249,7 @@ function buildCopilotUserPrompt(d: {
  * model finishes with tool_calls instead: the tool-call chunks are internal
  * (never displayed, never persisted as content), ONE tool is executed once
  * through the fixed server dispatcher with the session-derived userId, the
- * bounded result is returned to OpenAI as DATA, and ONE continuation request
+ * bounded result is returned to the model as DATA, and ONE continuation request
  * streams the final answer through the exact same persistence path. The
  * continuation request deliberately does NOT re-send the tool definitions,
  * so the model cannot request another tool: a third request is structurally
@@ -1257,7 +1264,7 @@ export const copilotReply = action({
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("You need to sign in to do that.");
 
-    const key = process.env.OPENAI_API_KEY;
+    const key = process.env.XAI_API_KEY;
     if (!key) return null;
 
     // Ownership first: a foreign conversationId can never be read.
@@ -1363,14 +1370,14 @@ export const copilotReply = action({
       }
       modelRequestCount += 1;
       try {
-        const res = await fetch(OPENAI_URL, {
+        const res = await fetch(XAI_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${key}`,
           },
           body: JSON.stringify({
-            model: "gpt-4o-mini",
+            model: COPILOT_MODEL,
             stream: true,
             // Tool definitions on the FIRST request only. The continuation
             // request omits them: the model cannot request a second tool,
@@ -1504,7 +1511,7 @@ export const copilotReply = action({
 
     // ── TOOL-CALL PATH (2c-4B) ──────────────────────────────────────────────
     // Tool-call deltas are internal: never displayed, never persisted as
-    // content (§7). Merge by index first — OpenAI streams ONE logical call
+    // content (§7). Merge by index first — xAI streams ONE logical call
     // as several partial chunks — then apply the 2c-4A classification.
     const mergedCalls = mergeToolCallDeltas(first.deltas);
     const classification = detectSingleToolCall(mergedCalls);
