@@ -1337,7 +1337,7 @@ describe("2c-4B: structural source invariants (§10/§13/§15)", () => {
   const source = require("fs").readFileSync("src/convex/ai.ts", "utf8");
   test("exactly two request sites + hard counters guarded in code", () => {
     const reply = source.slice(source.indexOf("export const copilotReply"));
-    expect((reply.match(/await fetch\(XAI_URL/g) ?? []).length).toBe(1); // one fetch site, called ≤2×
+    expect((reply.match(/await fetch\(GEMINI_URL/g) ?? []).length).toBe(1); // one fetch site, called ≤2×
     expect((reply.match(/modelRequestCount >= 2/g) ?? []).length).toBe(1); // request ceiling enforced
     expect((reply.match(/toolExecutionCount >= 1/g) ?? []).length).toBe(1); // tool ceiling enforced
     expect((reply.match(/modelRequestCount \+= 1/g) ?? []).length).toBe(1);

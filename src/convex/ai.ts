@@ -10,10 +10,10 @@ import type { ToolErr, ToolOk } from "./assistant";
 /**
  * Server-side AI actions. The shared chat-completions URL constant serves
  * OpenAI (lead analysis, business brief, proposal assist); the Copilot
- * streaming path points at xAI Grok.
+ * streaming path points at Google Gemini.
  *
  * API keys live ONLY in Convex environment variables (OPENAI_API_KEY /
- * XAI_API_KEY) and
+ * GEMINI_API_KEY) and
  * is read here at request time — it is never compiled into the frontend
  * bundle. If the key is missing or the call fails, the action returns null
  * and the client falls back to the deterministic heuristic estimator, so the
@@ -21,10 +21,12 @@ import type { ToolErr, ToolOk } from "./assistant";
  */
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-// xAI Grok endpoint for the Copilot streaming path (same wire format:
-// chat-completions request shape, SSE streaming, native tool calling).
-const XAI_URL = "https://api.x.ai/v1/chat/completions";
-const COPILOT_MODEL = "grok-4.7";
+// Google Gemini endpoint for the Copilot streaming path. Gemini's official
+// OpenAI-compatibility layer serves the same wire format: chat-completions
+// request shape, SSE delta streaming, and native OpenAI-style function-calling
+// tool definitions — so the existing parser/tool pipeline is provider-neutral.
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+const COPILOT_MODEL = "gemini-3.8-flash";
 
 // ── Copilot tool dispatcher (Phase 2c-2) ───────────────────────────────────
 //
@@ -1264,7 +1266,7 @@ export const copilotReply = action({
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("You need to sign in to do that.");
 
-    const key = process.env.XAI_API_KEY;
+    const key = process.env.GEMINI_API_KEY;
     if (!key) return null;
 
     // Ownership first: a foreign conversationId can never be read.
@@ -1370,7 +1372,7 @@ export const copilotReply = action({
       }
       modelRequestCount += 1;
       try {
-        const res = await fetch(XAI_URL, {
+        const res = await fetch(GEMINI_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1511,7 +1513,7 @@ export const copilotReply = action({
 
     // ── TOOL-CALL PATH (2c-4B) ──────────────────────────────────────────────
     // Tool-call deltas are internal: never displayed, never persisted as
-    // content (§7). Merge by index first — xAI streams ONE logical call
+    // content (§7). Merge by index first — Gemini streams ONE logical call
     // as several partial chunks — then apply the 2c-4A classification.
     const mergedCalls = mergeToolCallDeltas(first.deltas);
     const classification = detectSingleToolCall(mergedCalls);
