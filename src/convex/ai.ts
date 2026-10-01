@@ -26,7 +26,7 @@ const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 // request shape, SSE delta streaming, and native OpenAI-style function-calling
 // tool definitions — so the existing parser/tool pipeline is provider-neutral.
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-const COPILOT_MODEL = "gemini-3.8-flash";
+const COPILOT_MODEL = "gemini-3.5-flash-lite";
 
 // ── Copilot tool dispatcher (Phase 2c-2) ───────────────────────────────────
 //
@@ -1502,7 +1502,15 @@ export const copilotReply = action({
     );
     if (!first) return null;
 
-    const outcome = splitFirstResponse(first.resFull, first.sawToolCallFinish);
+    // Gemini's OpenAI-compat layer can end a tool-call turn with
+    // finish_reason: "stop" while still streaming delta.tool_calls. Delta
+    // presence is therefore sufficient — alongside the OpenAI-convention
+    // finish — to enter the tool path (the one-tool limit is still enforced
+    // by detectSingleToolCall + toolExecutionCount below).
+    const outcome = splitFirstResponse(
+      first.resFull,
+      first.sawToolCallFinish || first.deltas.length > 0,
+    );
 
     // Normal path (the overwhelmingly common one): stream the already
     // accumulated answer through the unchanged insert-once persistence.

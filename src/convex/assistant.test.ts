@@ -1225,6 +1225,55 @@ describe("2c-4B: splitFirstResponse (three outcomes, §2)", () => {
   });
 });
 
+describe("2c-4B: tool-detection rule (Gemini compat: finish vs delta presence)", () => {
+  // The call site in copilotReply applies splitFirstResponse with
+  // (resFull, sawToolCallFinish || deltas.length > 0) — Gemini can end a
+  // tool-call turn with finish_reason: "stop" while streaming
+  // delta.tool_calls. These tests pin the four observable quadrants.
+  const delta = streamedCallDeltas("get_deal", JSON.stringify({ dealId: VALID_ID }));
+  const enterToolPath = (resFull: string, finish: "tool_calls" | "stop" | null, deltas: unknown[]) => {
+    const sawToolCallFinish = finish === "tool_calls";
+    const split = splitFirstResponse(resFull, sawToolCallFinish || deltas.length > 0);
+    if (split.kind !== "tool_call") return false;
+    return detectSingleToolCall(mergeToolCallDeltas(deltas)).kind === "single";
+  };
+
+  test("1) finish_reason tool_calls + tool delta → tool path (OpenAI convention)", () => {
+    expect(enterToolPath("", "tool_calls", delta)).toBe(true);
+    expect(enterToolPath("stray", "tool_calls", delta)).toBe(true);
+  });
+  test("2) finish_reason stop + tool delta → tool path (Gemini compat)", () => {
+    expect(enterToolPath("", "stop", delta)).toBe(true);
+  });
+  test("3) finish_reason stop + no tool delta → normal text path", () => {
+    const sawToolCallFinish = false;
+    const split = splitFirstResponse("Here is your summary.", sawToolCallFinish || 0 > 0);
+    expect(split.kind).toBe("content");
+    // Empty text still falls back (unchanged existing behavior).
+    expect(splitFirstResponse("", false).kind).toBe("empty");
+  });
+  test("4) multiple tool calls still rejected even under delta-presence entry", () => {
+    const twoCalls = [
+      ...streamedCallDeltas("get_deal", "{}"),
+      { index: 1, id: "call_2", type: "function", function: { name: "get_clients", arguments: "{}" } },
+    ];
+    const sawToolCallFinish = false;
+    const split = splitFirstResponse("", sawToolCallFinish || twoCalls.length > 0);
+    expect(split.kind).toBe("tool_call"); // enters tool path…
+    expect(detectSingleToolCall(mergeToolCallDeltas(twoCalls)).kind).toBe("too_many"); // …but is rejected
+  });
+  test("5) existing parser behavior intact (merge + parse unchanged)", () => {
+    const merged = mergeToolCallDeltas(delta);
+    expect(merged.length).toBe(1);
+    const out = detectSingleToolCall(merged);
+    expect(out.kind).toBe("single");
+    if (out.kind === "single") {
+      expect(out.call.ok).toBe(true);
+      expect(out.call.name).toBe("get_deal");
+    }
+  });
+});
+
 describe("2c-4B: each whitelisted tool resolves to exactly ONE execution candidate", () => {
   const cases: [string, Record<string, unknown>][] = [
     ["get_deal", { dealId: VALID_ID }],
@@ -1366,6 +1415,13 @@ describe("2c-4B: structural source invariants (§10/§13/§15)", () => {
     const reply = source.slice(source.indexOf("export const copilotReply"));
     expect(reply.includes("if (!first) return null;")).toBe(true);
     expect(reply.includes("if (!second) return null;")).toBe(true);
+  });
+  test("tool-detection rule: delta presence enters the tool path (Gemini compat)", () => {
+    const reply = source.slice(source.indexOf("export const copilotReply"));
+    expect(reply.includes("first.sawToolCallFinish || first.deltas.length > 0")).toBe(true);
+    // The one-tool ceilings are unchanged and still enforced in code.
+    expect((reply.match(/toolExecutionCount >= 1/g) ?? []).length).toBe(1);
+    expect((reply.match(/toolExecutionCount \+= 1/g) ?? []).length).toBe(1);
   });
   test("duplicate-submit protection untouched (one invocation per submission)", () => {
     const ui = require("fs").readFileSync("src/pages/Assistant.tsx", "utf8");
