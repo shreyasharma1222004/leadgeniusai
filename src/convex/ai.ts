@@ -1263,11 +1263,18 @@ export const copilotReply = action({
     message: v.string(),
   },
   handler: async (ctx, { conversationId, message }): Promise<string | null> => {
+    // [TEMP-DIAG] stage-code tracing — remove after diagnosis. Codes only:
+    // no prompts, workspace data, keys, generated text, args, or user data.
+    console.log("COPILOT_STAGE START");
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("You need to sign in to do that.");
 
     const key = process.env.GEMINI_API_KEY;
-    if (!key) return null;
+    if (!key) {
+      console.log("COPILOT_STAGE FALLBACK"); // [TEMP-DIAG]
+      return null;
+    }
+    console.log("COPILOT_STAGE KEY_OK"); // [TEMP-DIAG]
 
     // Ownership first: a foreign conversationId can never be read.
     const conv = await ctx.runQuery(internal.assistant.getOwnedConversation, {
@@ -1372,6 +1379,7 @@ export const copilotReply = action({
       }
       modelRequestCount += 1;
       try {
+        console.log("COPILOT_STAGE REQUEST"); // [TEMP-DIAG]
         const res = await fetch(GEMINI_URL, {
           method: "POST",
           headers: {
@@ -1390,7 +1398,11 @@ export const copilotReply = action({
             max_tokens: 700,
           }),
         });
-        if (!res.ok || !res.body) return null;
+        if (!res.ok || !res.body) {
+          console.log("COPILOT_STAGE HTTP_ERROR"); // [TEMP-DIAG]
+          return null;
+        }
+        console.log("COPILOT_STAGE HTTP_200"); // [TEMP-DIAG]
 
         // Consume the SSE stream: accumulate content deltas and raw
         // tool-call chunks. The caller decides what to do AFTER the stream
@@ -1400,6 +1412,8 @@ export const copilotReply = action({
         let buffer = "";
         let resFull = "";
         const deltas: unknown[] = [];
+        let loggedContent = false; // [TEMP-DIAG]
+        let loggedTool = false; // [TEMP-DIAG]
         let sawToolCallFinish = false;
         let interrupted = false;
         try {
@@ -1423,10 +1437,18 @@ export const copilotReply = action({
                 };
                 const delta = evt.choices?.[0]?.delta?.content;
                 if (typeof delta === "string" && delta.length > 0) {
+                  if (!loggedContent) {
+                    console.log("COPILOT_STAGE STREAM_CONTENT"); // [TEMP-DIAG]
+                    loggedContent = true;
+                  }
                   resFull += delta;
                 }
                 const tcDelta = evt.choices?.[0]?.delta?.tool_calls;
                 if (tcDelta !== undefined && tcDelta !== null) {
+                  if (!loggedTool) {
+                    console.log("COPILOT_STAGE STREAM_TOOL"); // [TEMP-DIAG]
+                    loggedTool = true;
+                  }
                   if (Array.isArray(tcDelta)) deltas.push(...tcDelta);
                   else deltas.push(tcDelta);
                 }
@@ -1442,6 +1464,7 @@ export const copilotReply = action({
           // the caller's partial-content handling (§9C) applies unchanged.
           interrupted = true;
         }
+        if (!interrupted) console.log("COPILOT_STAGE STREAM_END"); // [TEMP-DIAG]
         return { resFull, sawToolCallFinish, deltas, interrupted };
       } catch {
         // Request setup/response-header failure: nothing usable arrived.
@@ -1488,7 +1511,11 @@ export const copilotReply = action({
         // §2b-6 (§5/§8): once a row exists we NEVER degrade to null (that
         // would duplicate it with a fallback answer).
       }
-      if (messageId === null) return null;
+      if (messageId === null) {
+        console.log("COPILOT_STAGE FALLBACK"); // [TEMP-DIAG]
+        return null;
+      }
+      console.log("COPILOT_STAGE PERSIST_OK"); // [TEMP-DIAG]
       return wasInterrupted ? "partial" : "ok";
     };
 
@@ -1500,6 +1527,7 @@ export const copilotReply = action({
       ],
       true, // tool definitions on the first request only
     );
+    if (!first) console.log("COPILOT_STAGE FALLBACK"); // [TEMP-DIAG]
     if (!first) return null;
 
     // Gemini's OpenAI-compat layer can end a tool-call turn with
@@ -1517,7 +1545,10 @@ export const copilotReply = action({
     if (outcome.kind === "content") {
       return await writeStreamedAnswer(outcome.fullText, first.interrupted);
     }
-    if (outcome.kind === "empty") return null;
+    if (outcome.kind === "empty") {
+      console.log("COPILOT_STAGE FALLBACK"); // [TEMP-DIAG]
+      return null;
+    }
 
     // ── TOOL-CALL PATH (2c-4B) ──────────────────────────────────────────────
     // Tool-call deltas are internal: never displayed, never persisted as
@@ -1540,6 +1571,7 @@ export const copilotReply = action({
       } catch {
         // Marker write failed: nothing was persisted, so the existing
         // deterministic fallback (null → client) remains the honest path.
+        console.log("COPILOT_STAGE FALLBACK"); // [TEMP-DIAG]
         return null;
       }
       return "ok";
@@ -1551,6 +1583,7 @@ export const copilotReply = action({
       throw new Error("Tool execution limit reached.");
     }
     toolExecutionCount += 1;
+    console.log("COPILOT_STAGE TOOL_EXEC"); // [TEMP-DIAG]
     const firstCall = mergedCalls[0] as { id?: unknown };
     const toolCallId = typeof firstCall?.id === "string" ? firstCall.id : "call_0";
     let toolPayload: ToolResultPayload;
@@ -1594,7 +1627,9 @@ export const copilotReply = action({
         toolCallId,
       }),
     ];
+    console.log("COPILOT_STAGE CONTINUATION"); // [TEMP-DIAG]
     const second = await runModelStream(continuationMessages, false);
+    if (!second) console.log("COPILOT_STAGE FALLBACK"); // [TEMP-DIAG]
     if (!second) return null; // §9B: no third request — deterministic fallback
 
     // The continuation's answer is the only user-visible assistant turn for
