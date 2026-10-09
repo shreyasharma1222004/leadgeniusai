@@ -1263,11 +1263,20 @@ export const copilotReply = action({
     message: v.string(),
   },
   handler: async (ctx, { conversationId, message }): Promise<string | null> => {
+    // [COPILOT-DIAG] temporary stage tracing — content-safe: stage names,
+    // HTTP status codes, fixed categories, durations, outcomes only.
+    const diagT0 = Date.now();
+    console.log("COPILOT_DIAG ACTION_START");
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("You need to sign in to do that.");
 
     const key = process.env.GEMINI_API_KEY;
-    if (!key) return null;
+    if (!key) {
+      console.log("COPILOT_DIAG KEY_MISSING");
+      console.log("COPILOT_DIAG OUTCOME null reason=key_missing");
+      return null;
+    }
+    console.log("COPILOT_DIAG KEY_OK");
 
     // Ownership first: a foreign conversationId can never be read.
     const conv = await ctx.runQuery(internal.assistant.getOwnedConversation, {
@@ -1371,6 +1380,8 @@ export const copilotReply = action({
         throw new Error("Model request limit reached.");
       }
       modelRequestCount += 1;
+      console.log(`COPILOT_DIAG REQ_START req=${modelRequestCount}`);
+      const reqT0 = Date.now();
       try {
         const res = await fetch(GEMINI_URL, {
           method: "POST",
@@ -1390,7 +1401,15 @@ export const copilotReply = action({
             max_tokens: 700,
           }),
         });
-        if (!res.ok || !res.body) return null;
+        if (!res.ok || !res.body) {
+          if (!res.ok) {
+            console.log(`COPILOT_DIAG REQ_HTTP_FAILED req=${modelRequestCount} status=${res.status} category=http_error`);
+          } else {
+            console.log(`COPILOT_DIAG REQ_HTTP_FAILED req=${modelRequestCount} status=${res.status} category=no_body`);
+          }
+          return null;
+        }
+        console.log(`COPILOT_DIAG REQ_HTTP_OK req=${modelRequestCount} status=${res.status}`);
 
         // Consume the SSE stream: accumulate content deltas and raw
         // tool-call chunks. The caller decides what to do AFTER the stream
@@ -1402,6 +1421,8 @@ export const copilotReply = action({
         const deltas: unknown[] = [];
         let sawToolCallFinish = false;
         let interrupted = false;
+        let sawContentDelta = false; // [COPILOT-DIAG]
+        let sawToolDelta = false; // [COPILOT-DIAG]
         try {
           for (;;) {
             const { done, value } = await reader.read();
@@ -1423,10 +1444,12 @@ export const copilotReply = action({
                 };
                 const delta = evt.choices?.[0]?.delta?.content;
                 if (typeof delta === "string" && delta.length > 0) {
+                  sawContentDelta = true; // [COPILOT-DIAG]
                   resFull += delta;
                 }
                 const tcDelta = evt.choices?.[0]?.delta?.tool_calls;
                 if (tcDelta !== undefined && tcDelta !== null) {
+                  sawToolDelta = true; // [COPILOT-DIAG]
                   if (Array.isArray(tcDelta)) deltas.push(...tcDelta);
                   else deltas.push(tcDelta);
                 }
@@ -1441,10 +1464,13 @@ export const copilotReply = action({
           // Network stream died mid-way — return what accumulated so far;
           // the caller's partial-content handling (§9C) applies unchanged.
           interrupted = true;
+          console.log(`COPILOT_DIAG STREAM_INTERRUPTED req=${modelRequestCount} elapsedMs=${Date.now() - reqT0}`); // [COPILOT-DIAG]
         }
+        console.log(`COPILOT_DIAG STREAM_END req=${modelRequestCount} content=${sawContentDelta ? "yes" : "no"} toolDeltas=${sawToolDelta ? "yes" : "no"} finish=${sawToolCallFinish ? "tool_calls" : "other"} interrupted=${interrupted ? "yes" : "no"} chars=${resFull.length} elapsedMs=${Date.now() - reqT0}`); // [COPILOT-DIAG]
         return { resFull, sawToolCallFinish, deltas, interrupted };
       } catch {
         // Request setup/response-header failure: nothing usable arrived.
+        console.log(`COPILOT_DIAG REQ_HTTP_FAILED req=${modelRequestCount} status=none category=network`); // [COPILOT-DIAG]
         return null;
       }
     };
@@ -1488,7 +1514,10 @@ export const copilotReply = action({
         // §2b-6 (§5/§8): once a row exists we NEVER degrade to null (that
         // would duplicate it with a fallback answer).
       }
-      if (messageId === null) return null;
+      if (messageId === null) {
+        console.log("COPILOT_DIAG PERSIST_FAILED reason=no_row"); // [COPILOT-DIAG]
+        return null;
+      }
       return wasInterrupted ? "partial" : "ok";
     };
 
@@ -1500,6 +1529,7 @@ export const copilotReply = action({
       ],
       true, // tool definitions on the first request only
     );
+    if (!first) console.log("COPILOT_DIAG OUTCOME null reason=first_request_failed"); // [COPILOT-DIAG]
     if (!first) return null;
 
     // Gemini's OpenAI-compat layer can end a tool-call turn with
@@ -1515,9 +1545,14 @@ export const copilotReply = action({
     // Normal path (the overwhelmingly common one): stream the already
     // accumulated answer through the unchanged insert-once persistence.
     if (outcome.kind === "content") {
-      return await writeStreamedAnswer(outcome.fullText, first.interrupted);
+      const persisted = await writeStreamedAnswer(outcome.fullText, first.interrupted);
+      console.log(`COPILOT_DIAG OUTCOME ${persisted ?? "null"} path=direct`); // [COPILOT-DIAG]
+      return persisted;
     }
-    if (outcome.kind === "empty") return null;
+    if (outcome.kind === "empty") {
+      console.log("COPILOT_DIAG OUTCOME null reason=empty_response"); // [COPILOT-DIAG]
+      return null;
+    }
 
     // ── TOOL-CALL PATH (2c-4B) ──────────────────────────────────────────────
     // Tool-call deltas are internal: never displayed, never persisted as
@@ -1540,8 +1575,10 @@ export const copilotReply = action({
       } catch {
         // Marker write failed: nothing was persisted, so the existing
         // deterministic fallback (null → client) remains the honest path.
+        console.log("COPILOT_DIAG OUTCOME null reason=marker_write_failed"); // [COPILOT-DIAG]
         return null;
       }
+      console.log("COPILOT_DIAG OUTCOME ok path=tool_call_notice"); // [COPILOT-DIAG]
       return "ok";
     }
 
@@ -1551,6 +1588,7 @@ export const copilotReply = action({
       throw new Error("Tool execution limit reached.");
     }
     toolExecutionCount += 1;
+    console.log(`COPILOT_DIAG TOOL_EXEC tool=${classification.call.name}`); // [COPILOT-DIAG] whitelisted name only
     const firstCall = mergedCalls[0] as { id?: unknown };
     const toolCallId = typeof firstCall?.id === "string" ? firstCall.id : "call_0";
     let toolPayload: ToolResultPayload;
@@ -1566,6 +1604,7 @@ export const copilotReply = action({
       // never internal details, never a crash of the whole turn.
       toolPayload = { ok: false, code: "failed" };
     }
+    console.log(`COPILOT_DIAG TOOL_RESULT ${toolPayload.ok ? "ok" : `error code=${toolPayload.code}`}`); // [COPILOT-DIAG]
 
     // ── CONTINUATION REQUEST (the only second request) ─────────────────────
     // Same system prompt + same bounded user context + the assistant
@@ -1594,11 +1633,16 @@ export const copilotReply = action({
         toolCallId,
       }),
     ];
+    console.log("COPILOT_DIAG CONTINUATION_START"); // [COPILOT-DIAG]
     const second = await runModelStream(continuationMessages, false);
+    if (!second) console.log("COPILOT_DIAG OUTCOME null reason=continuation_failed"); // [COPILOT-DIAG]
     if (!second) return null; // §9B: no third request — deterministic fallback
 
     // The continuation's answer is the only user-visible assistant turn for
     // this submission; it persists through the SAME path as any reply.
-    return await writeStreamedAnswer(second.resFull, second.interrupted);
+    const persistedSecond = await writeStreamedAnswer(second.resFull, second.interrupted);
+    console.log(`COPILOT_DIAG OUTCOME ${persistedSecond ?? "null"} path=continuation`); // [COPILOT-DIAG]
+    console.log(`COPILOT_DIAG ACTION_DONE totalMs=${Date.now() - diagT0}`); // [COPILOT-DIAG]
+    return persistedSecond;
   },
 });
